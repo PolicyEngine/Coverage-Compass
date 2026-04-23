@@ -42,6 +42,9 @@ OUTPUT_VARIABLES = [
     # Healthcare
     "medicaid",
     "chip",
+    # ACA marketplace premiums
+    "slcsp",               # gross silver benchmark plan (annual)
+    "marketplace_net_premium",  # net after PTC (annual)
     # Energy/utilities
     "liheap",  # Low Income Home Energy Assistance
     "lifeline",  # Phone/broadband subsidy

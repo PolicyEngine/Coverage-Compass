@@ -26,6 +26,9 @@ VARIABLE_METADATA = {
     # Healthcare
     "medicaid": ("Medicaid", "benefit", 1),
     "chip": ("CHIP", "benefit", 1),
+    # ACA marketplace premiums
+    "slcsp": ("Silver Plan (Gross)", "aca_premium", 1),
+    "marketplace_net_premium": ("Silver Plan (Your Cost)", "aca_premium", 1),
     # Energy/utilities
     "liheap": ("LIHEAP (Energy)", "benefit", 2),
     "lifeline": ("Lifeline (Phone)", "benefit", 2),

@@ -193,6 +193,26 @@ def format_result_for_frontend(result) -> dict:
     if result.healthcare_after:
         response["healthcareAfter"] = result.healthcare_after.to_dict()
 
+    # Add ACA premium breakdown when marketplace coverage is in play
+    slcsp_before = result.changes.get("slcsp")
+    slcsp_after = result.changes.get("slcsp")
+    net_before = result.changes.get("marketplace_net_premium")
+    net_after = result.changes.get("marketplace_net_premium")
+    ptc_change = result.changes.get("premium_tax_credit")
+    if slcsp_before or slcsp_after:
+        response["acaPremiums"] = {
+            "before": {
+                "silverGross": slcsp_before.before if slcsp_before else 0,
+                "silverNet": net_before.before if net_before else 0,
+                "ptc": ptc_change.before if ptc_change else 0,
+            },
+            "after": {
+                "silverGross": slcsp_after.after if slcsp_after else 0,
+                "silverNet": net_after.after if net_after else 0,
+                "ptc": ptc_change.after if ptc_change else 0,
+            },
+        }
+
     return response
 
 

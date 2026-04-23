@@ -1,9 +1,10 @@
 'use client';
 
-import { BenefitMetric, HealthcareCoverage, SimulationResult } from '@/types';
+import { BenefitMetric, HealthcareCoverage, LifeEventType, SimulationResult } from '@/types';
 
 interface ResultsViewProps {
   result: SimulationResult;
+  eventType?: LifeEventType;
   onReset: () => void;
 }
 
@@ -34,6 +35,90 @@ function getCoverageLabel(type: string | null): string {
       return 'ACA Marketplace';
     default:
       return type || '—';
+  }
+}
+
+function generateSummary(result: SimulationResult, eventType?: LifeEventType): string | null {
+  const metrics = result.before.metrics || [];
+  const ptcBefore = metrics.find(m => m.name === 'premium_tax_credit')?.before ?? 0;
+  const ptcAfter  = metrics.find(m => m.name === 'premium_tax_credit')?.after  ?? 0;
+
+  const anyMarketplaceAfter = (result.healthcareAfter?.people || []).some(p => p.coverage === 'Marketplace');
+  const anyMedicaidAfter    = (result.healthcareAfter?.people || []).some(p => p.coverage === 'Medicaid');
+  const anyMedicaidBefore   = (result.healthcareBefore?.people || []).some(p => p.coverage === 'Medicaid');
+
+  switch (eventType) {
+    case 'losing_esi':
+      if (anyMedicaidAfter) {
+        return 'Without employer coverage, your income qualifies you for Medicaid — there\'s no monthly premium.';
+      }
+      if (ptcAfter > 0) {
+        return `Without employer coverage, you qualify for a ${formatMonthly(ptcAfter)}/month ACA tax credit toward a marketplace plan.`;
+      }
+      return 'Without employer coverage, you can enroll in an ACA marketplace plan during a special enrollment period.';
+
+    case 'having_baby':
+      if (anyMedicaidAfter && !anyMedicaidBefore) {
+        return 'During pregnancy, your household size increases for eligibility purposes, qualifying you for Medicaid with no monthly premium.';
+      }
+      if (anyMedicaidAfter) {
+        return 'During pregnancy, your household size increases for eligibility purposes, which may strengthen your Medicaid eligibility.';
+      }
+      return 'During pregnancy, your household size increases for eligibility purposes. The baby\'s coverage would begin at birth.';
+
+    case 'getting_married': {
+      const netChange = result.diff.netIncome;
+      if (ptcAfter === 0 && ptcBefore > 0) {
+        return `Combining households raises your income above the ACA subsidy threshold, eliminating the ${formatMonthly(ptcBefore)}/month tax credit.`;
+      }
+      if (ptcAfter > ptcBefore) {
+        return `Combining households improves your ACA eligibility, increasing your tax credit to ${formatMonthly(ptcAfter)}/month.`;
+      }
+      if (netChange > 0) {
+        return `Combining households adds ${formatMonthly(netChange)}/month in net income to the household.`;
+      }
+      return 'Combining households changes your coverage options based on your new combined income.';
+    }
+
+    case 'divorce': {
+      if (anyMedicaidAfter && !anyMedicaidBefore) {
+        return 'As a single filer, your income qualifies you for Medicaid with no monthly premium.';
+      }
+      if (ptcAfter > 0) {
+        return `As a single filer, you qualify for an ACA tax credit of ${formatMonthly(ptcAfter)}/month toward a marketplace plan.`;
+      }
+      return 'After separating, your coverage is based on your individual income as a single filer.';
+    }
+
+    case 'moving_states':
+      if (anyMedicaidAfter && !anyMedicaidBefore) {
+        return 'Your new state qualifies you for Medicaid, which has no monthly premium.';
+      }
+      if (!anyMedicaidAfter && anyMedicaidBefore) {
+        return 'Your new state has different Medicaid eligibility rules — you no longer qualify.';
+      }
+      if (ptcAfter !== ptcBefore) {
+        return `Your new state changes your ACA tax credit from ${formatMonthly(ptcBefore)} to ${formatMonthly(ptcAfter)}/month.`;
+      }
+      return 'Your new state may have different benefit programs and eligibility rules.';
+
+    case 'changing_income': {
+      const ptcChange = ptcAfter - ptcBefore;
+      if (anyMedicaidAfter && !anyMedicaidBefore) {
+        return 'Your lower income now qualifies you for Medicaid with no monthly premium.';
+      }
+      if (!anyMedicaidAfter && anyMedicaidBefore) {
+        return 'Your higher income moves you out of Medicaid eligibility. You can enroll in an ACA marketplace plan instead.';
+      }
+      if (Math.abs(ptcChange) > 10) {
+        const direction = ptcChange > 0 ? 'increases' : 'reduces';
+        return `Your new income ${direction} your ACA tax credit by ${formatMonthly(Math.abs(ptcChange))}/month.`;
+      }
+      return null;
+    }
+
+    default:
+      return null;
   }
 }
 
@@ -104,7 +189,7 @@ function FinancialRow({
   );
 }
 
-export default function ResultsView({ result, onReset }: ResultsViewProps) {
+export default function ResultsView({ result, eventType, onReset }: ResultsViewProps) {
   if (!result?.before || !result?.after) {
     return (
       <div className="card p-8 text-center">
@@ -137,8 +222,61 @@ export default function ResultsView({ result, onReset }: ResultsViewProps) {
     ? Array.from(beforeLabels)
     : Array.from(new Set([...beforeLabels, ...afterLabels]));
 
+  const summary = generateSummary(result, eventType);
+
+  // Show ACA premium callout when there's a non-zero silver plan in before or after
+  const acaBefore = result.acaPremiums?.before;
+  const acaAfter  = result.acaPremiums?.after;
+  const showAcaBefore = (acaBefore?.silverGross ?? 0) > 0;
+  const showAcaAfter  = (acaAfter?.silverGross  ?? 0) > 0;
+
   return (
     <div className="space-y-6">
+      {summary && (
+        <div className="card px-5 py-4 text-sm text-gray-700 border-l-4 border-[#319795] bg-[#F0FAFA]">
+          {summary}
+        </div>
+      )}
+
+      {(showAcaBefore || showAcaAfter) && (
+        <div className="card p-5 space-y-4">
+          <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider">ACA Marketplace Plan Costs</h3>
+          <div className={`grid gap-4 ${showAcaBefore && showAcaAfter ? 'grid-cols-2' : 'grid-cols-1'}`}>
+            {showAcaBefore && (
+              <div className="space-y-1.5">
+                {showAcaAfter && <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Before</p>}
+                <p className="text-sm text-gray-600">
+                  Silver plan: <span className="font-medium text-gray-900">{formatMonthly(acaBefore!.silverGross)}/month</span>
+                </p>
+                <p className="text-sm text-gray-600">
+                  Tax credit: <span className="font-medium text-[#2C7A7B]">−{formatMonthly(acaBefore!.ptc)}/month</span>
+                </p>
+                <p className="text-sm font-semibold text-gray-900">
+                  Your cost: {formatMonthly(acaBefore!.silverNet)}/month
+                </p>
+              </div>
+            )}
+            {showAcaAfter && (
+              <div className="space-y-1.5">
+                {showAcaBefore && <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">After</p>}
+                <p className="text-sm text-gray-600">
+                  Silver plan: <span className="font-medium text-gray-900">{formatMonthly(acaAfter!.silverGross)}/month</span>
+                </p>
+                <p className="text-sm text-gray-600">
+                  Tax credit: <span className="font-medium text-[#2C7A7B]">−{formatMonthly(acaAfter!.ptc)}/month</span>
+                </p>
+                <p className="text-sm font-semibold text-gray-900">
+                  Your cost: {formatMonthly(acaAfter!.silverNet)}/month
+                </p>
+              </div>
+            )}
+          </div>
+          <p className="text-xs text-gray-500 pt-1 border-t border-gray-100">
+            Bronze plans cost less per month but have higher deductibles and out-of-pocket costs. Gold and platinum plans cost more but cover more when you use care. Your tax credit applies to any metal tier.
+          </p>
+        </div>
+      )}
+
       <div className="card overflow-hidden">
         <table className="w-full border-collapse">
           <thead>

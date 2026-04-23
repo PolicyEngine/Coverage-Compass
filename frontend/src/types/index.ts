@@ -137,6 +137,10 @@ export interface SimulationResult {
   };
   healthcareBefore?: HealthcareCoverage;
   healthcareAfter?: HealthcareCoverage;
+  acaPremiums?: {
+    before: { silverGross: number; silverNet: number; ptc: number };
+    after:  { silverGross: number; silverNet: number; ptc: number };
+  };
   event?: {
     name: string;
     description: string;

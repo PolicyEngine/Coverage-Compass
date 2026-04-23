@@ -487,7 +487,7 @@ export default function Home() {
                   </div>
                 </div>
 
-                <ResultsView result={result} onReset={handleReset} />
+                <ResultsView result={result} eventType={selectedEvent ?? undefined} onReset={handleReset} />
               </>
             ) : null}
           </div>
