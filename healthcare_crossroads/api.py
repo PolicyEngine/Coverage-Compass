@@ -96,13 +96,14 @@ def create_household_from_request(data: dict) -> Household:
         state=data.get("state", "CA"),
         members=members,
         year=data.get("year", 2024),
+        zip_code=data.get("zipCode") or None,
     )
 
 
 def create_event_from_request(event_type: str, params: dict, household: Household):
     """Convert frontend event type to backend LifeEvent."""
     event_map = {
-        "having_baby": lambda: NewChild(),
+        "having_baby": lambda: Pregnancy(),
         "moving_states": lambda: Move(new_state=params.get("newState", "TX")),
         "getting_married": lambda: Marriage(
             spouse_age=params.get("spouseAge", 30),

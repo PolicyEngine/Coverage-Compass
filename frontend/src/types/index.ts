@@ -1,5 +1,6 @@
 export interface Household {
   state: string;
+  zipCode?: string;
   filingStatus: 'single' | 'married_jointly' | 'married_separately' | 'head_of_household';
   income: number;
   spouseIncome: number;
@@ -85,8 +86,8 @@ export interface SimulationResult {
 export const LIFE_EVENTS: LifeEvent[] = [
   {
     type: 'having_baby',
-    label: 'Having a Baby',
-    description: 'See how a new child changes Medicaid, CHIP, and marketplace support',
+    label: 'Being Pregnant',
+    description: 'See how pregnancy affects your Medicaid eligibility and coverage right now',
     icon: 'baby',
   },
   {

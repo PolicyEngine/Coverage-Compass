@@ -21,6 +21,7 @@ function decodeScenario(encoded: string): { household: Household; event: LifeEve
       // Ensure all required household fields have defaults (for backwards compatibility)
       const household: Household = {
         state: data.h.state || 'CA',
+        zipCode: data.h.zipCode || undefined,
         filingStatus: data.h.filingStatus || 'single',
         income: data.h.income ?? 50000,
         spouseIncome: data.h.spouseIncome ?? 0,

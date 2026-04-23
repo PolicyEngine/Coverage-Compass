@@ -8,7 +8,7 @@ interface ResultsViewProps {
   onReset: () => void;
 }
 
-const SUPPORT_METRIC_NAMES = new Set(['premium_tax_credit', 'wic']);
+const SUPPORT_METRIC_NAMES = new Set(['premium_tax_credit']);
 
 function formatCurrency(value: number): string {
   return new Intl.NumberFormat('en-US', {
@@ -18,9 +18,18 @@ function formatCurrency(value: number): string {
   }).format(value);
 }
 
+function formatMonthly(value: number): string {
+  return formatCurrency(value / 12);
+}
+
 function formatChange(value: number): string {
   const prefix = value >= 0 ? '+' : '';
   return `${prefix}${formatCurrency(value)}`;
+}
+
+function formatMonthlyChange(value: number): string {
+  const prefix = value >= 0 ? '+' : '';
+  return `${prefix}${formatMonthly(value)}`;
 }
 
 function getCoverageLabel(type: string | null): string {
@@ -111,12 +120,12 @@ function SummaryCard({
         <h3 className="text-sm font-medium text-gray-500">{title}</h3>
       </div>
       <div className="flex items-baseline gap-3">
-        <span className="text-2xl font-bold text-gray-900">{formatCurrency(after)}</span>
+        <span className="text-2xl font-bold text-gray-900">{formatMonthly(after)}/mo</span>
         <span className={`text-sm font-semibold px-2 py-0.5 rounded-full ${tone}`}>
-          {formatChange(diff)}
+          {formatMonthlyChange(diff)}/mo
         </span>
       </div>
-      <p className="mt-1.5 text-sm text-gray-400">was {formatCurrency(before)}</p>
+      <p className="mt-1.5 text-sm text-gray-400">was {formatMonthly(before)}/mo</p>
     </div>
   );
 }
@@ -273,10 +282,10 @@ function SupportChangesCard({ metrics }: { metrics: BenefitMetric[] }) {
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <h4 className="text-sm font-medium text-gray-900">{metric.label}</h4>
-                  <p className="text-xs text-gray-500">Before {formatCurrency(metric.before)} · After {formatCurrency(metric.after)}</p>
+                  <p className="text-xs text-gray-500">Before {formatMonthly(metric.before)}/mo · After {formatMonthly(metric.after)}/mo</p>
                 </div>
                 <span className={`text-xs font-semibold px-2 py-1 rounded-full ${tone}`}>
-                  {formatChange(diff)}
+                  {formatMonthlyChange(diff)}/mo
                 </span>
               </div>
             </div>

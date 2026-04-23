@@ -72,7 +72,7 @@ export default function LifeEventSelector({
       case 'having_baby':
         return (
           <div className="mt-4 pt-4 border-t border-gray-100">
-            <label className="label">Number of babies</label>
+            <label className="label">Number of babies expected</label>
             <select
               value={(eventParams.numBabies as number) || 1}
               onChange={(e) =>
@@ -85,6 +85,9 @@ export default function LifeEventSelector({
               <option value={2}>2 (Twins)</option>
               <option value={3}>3 (Triplets)</option>
             </select>
+            <p className="mt-1.5 text-xs text-gray-500">
+              Affects household size for Medicaid eligibility — babies not yet included in coverage results
+            </p>
           </div>
         );
 

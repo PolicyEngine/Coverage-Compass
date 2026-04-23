@@ -107,8 +107,8 @@ export default function HouseholdForm({
       </h2>
 
       <div className="space-y-6">
-        {/* State, Year & Filing Status Row */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
+        {/* State, Zip, Year & Filing Status Row */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-5">
           <div>
             <label htmlFor="state" className="label">
               State
@@ -126,6 +126,27 @@ export default function HouseholdForm({
                 </option>
               ))}
             </select>
+          </div>
+
+          <div>
+            <label htmlFor="zipCode" className="label">
+              Zip Code
+            </label>
+            <input
+              id="zipCode"
+              type="text"
+              inputMode="numeric"
+              maxLength={5}
+              pattern="[0-9]{5}"
+              placeholder="e.g. 90210"
+              value={household.zipCode ?? ''}
+              onChange={(e) => {
+                const v = e.target.value.replace(/\D/g, '').slice(0, 5);
+                updateField('zipCode', v || undefined);
+              }}
+              disabled={disabled}
+              className="input-field"
+            />
           </div>
 
           <div>
