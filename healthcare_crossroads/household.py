@@ -32,8 +32,8 @@ class Person:
         }
         if self.is_pregnant:
             result["is_pregnant"] = {year: True}
-        # Note: has_esi is tracked on the Person object for healthcare coverage
-        # display, but not passed to PolicyEngine (no such variable exists)
+        if self.has_esi:
+            result["has_esi"] = {year: True}
         return result
 
 

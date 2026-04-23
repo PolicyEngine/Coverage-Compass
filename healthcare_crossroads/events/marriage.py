@@ -36,12 +36,16 @@ class Marriage(LifeEvent):
         """Add a spouse (and optionally their children) to the household."""
         new_household = household.copy()
 
+        # Spouse joins head's ESI plan if head has one
+        head_has_esi = any(m.has_esi and m.is_tax_unit_head for m in household.members)
+        spouse_has_esi = self.spouse_has_esi or head_has_esi
+
         spouse = Person(
             age=self.spouse_age,
             employment_income=self.spouse_employment_income,
             self_employment_income=self.spouse_self_employment_income,
             is_tax_unit_spouse=True,
-            has_esi=self.spouse_has_esi,
+            has_esi=spouse_has_esi,
         )
         new_household.add_member(spouse)
 
