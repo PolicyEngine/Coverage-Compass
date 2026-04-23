@@ -138,7 +138,6 @@ export default function HouseholdForm({
               inputMode="numeric"
               maxLength={5}
               pattern="[0-9]{5}"
-              placeholder="e.g. 90210"
               value={household.zipCode ?? ''}
               onChange={(e) => {
                 const v = e.target.value.replace(/\D/g, '').slice(0, 5);
