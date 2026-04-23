@@ -189,10 +189,22 @@ function FinancialRow({
   );
 }
 
-function PlanCostBlock({ label, gross, net, ptc }: { label: string; gross: number; net: number; ptc: number }) {
+function PlanCostBlock({ label, gross, net, ptc, note }: { label: string; gross: number; net: number; ptc: number; note?: string }) {
   return (
     <div className="bg-gray-50 rounded-lg px-4 py-3 space-y-1">
-      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">{label}</p>
+      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide flex items-center gap-1">
+        {label}
+        {note && (
+          <span className="relative group cursor-default">
+            <svg className="w-3.5 h-3.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 w-52 px-2.5 py-1.5 bg-gray-800 text-white text-xs rounded shadow-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10 normal-case font-normal tracking-normal">
+              {note}
+            </span>
+          </span>
+        )}
+      </p>
       <p className="text-sm text-gray-600">Full cost: <span className="font-medium text-gray-900">{formatMonthly(gross)}/mo</span></p>
       {ptc > 0 && (
         <p className="text-sm text-gray-600">Tax credit: <span className="font-medium text-[#2C7A7B]">−{formatMonthly(ptc)}/mo</span></p>
@@ -258,20 +270,20 @@ export default function ResultsView({ result, eventType, onReset }: ResultsViewP
             {showAcaBefore && (
               <div className="space-y-3">
                 {showAcaAfter && <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Before</p>}
-                <PlanCostBlock label="Bronze plan" gross={acaBefore!.bronzeGross} net={acaBefore!.bronzeNet} ptc={acaBefore!.ptc} />
+                <PlanCostBlock label="Bronze plan" gross={acaBefore!.bronzeGross} net={acaBefore!.bronzeNet} ptc={acaBefore!.ptc} note="Estimated from state average bronze premiums — your actual plan may vary." />
                 <PlanCostBlock label="Silver plan" gross={acaBefore!.silverGross} net={acaBefore!.silverNet} ptc={acaBefore!.ptc} />
               </div>
             )}
             {showAcaAfter && (
               <div className="space-y-3">
                 {showAcaBefore && <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">After</p>}
-                <PlanCostBlock label="Bronze plan" gross={acaAfter!.bronzeGross} net={acaAfter!.bronzeNet} ptc={acaAfter!.ptc} />
+                <PlanCostBlock label="Bronze plan" gross={acaAfter!.bronzeGross} net={acaAfter!.bronzeNet} ptc={acaAfter!.ptc} note="Estimated from state average bronze premiums — your actual plan may vary." />
                 <PlanCostBlock label="Silver plan" gross={acaAfter!.silverGross} net={acaAfter!.silverNet} ptc={acaAfter!.ptc} />
               </div>
             )}
           </div>
           <p className="text-xs text-gray-500 pt-1 border-t border-gray-100">
-            Your tax credit applies to any metal tier. Bronze costs less per month but has higher deductibles; silver costs more but covers more of your care costs. Bronze estimate is based on state averages and will improve once rating-area data is available (<a href="https://github.com/PolicyEngine/policyengine-us/issues/8145" target="_blank" rel="noopener noreferrer" className="underline">tracked here</a>).
+            Your tax credit applies to any metal tier. Bronze costs less per month but has higher deductibles; silver costs more but covers more of your care costs.
           </p>
         </div>
       )}
