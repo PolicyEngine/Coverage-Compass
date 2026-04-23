@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import InputStrip from '@/components/InputStrip';
-import BriefingView from '@/components/BriefingView';
+import ResultsView from '@/components/ResultsView';
 import { Household, LifeEventType, SimulationResult, LIFE_EVENTS } from '@/types';
 
 function encodeScenario(household: Household, event: LifeEventType, params: Record<string, unknown>): string {
@@ -216,7 +216,7 @@ export default function Home() {
         )}
 
         {!isLoading && !error && result && selectedEvent && (
-          <BriefingView result={result} eventType={selectedEvent} onReset={handleReset} />
+          <ResultsView result={result} eventType={selectedEvent} onReset={handleReset} />
         )}
 
         {!isLoading && !error && !result && (

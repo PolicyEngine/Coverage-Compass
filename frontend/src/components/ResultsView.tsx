@@ -8,7 +8,7 @@ interface ResultsViewProps {
   onReset: () => void;
 }
 
-const SUPPORT_METRIC_NAMES = new Set(['premium_tax_credit']);
+const SUPPORT_METRIC_NAMES = new Set(['premium_tax_credit', 'medicaid', 'chip']);
 
 function formatCurrency(value: number): string {
   return new Intl.NumberFormat('en-US', {
@@ -231,13 +231,10 @@ export default function ResultsView({ result, eventType, onReset }: ResultsViewP
   }
 
   const metrics = result.before.metrics || [];
-  const financialRows = [
-    { label: 'Net income', before: result.before.netIncome, after: result.after.netIncome },
-    ...metrics
-      .filter((m) => SUPPORT_METRIC_NAMES.has(m.name))
-      .filter((m) => m.before !== 0 || m.after !== 0)
-      .map((m: BenefitMetric) => ({ label: m.label, before: m.before, after: m.after })),
-  ];
+  const financialRows = metrics
+    .filter((m) => SUPPORT_METRIC_NAMES.has(m.name))
+    .filter((m) => m.before !== 0 || m.after !== 0)
+    .map((m: BenefitMetric) => ({ label: m.label, before: m.before, after: m.after }));
 
   const isPregnancyScenario = result.event?.name === 'Pregnancy';
   const beforeLabels = new Set((result.healthcareBefore?.people || []).map((p) => p.label));

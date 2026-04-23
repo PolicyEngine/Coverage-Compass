@@ -38,16 +38,9 @@ function fmtMoChange(annual: number): string {
 }
 
 const METRIC_ORDER: { name: string; label: string; invertColor: boolean }[] = [
-  { name: '__net_income__', label: 'Net income', invertColor: false },
   { name: 'premium_tax_credit', label: 'Premium tax credit', invertColor: false },
   { name: 'medicaid', label: 'Medicaid', invertColor: false },
   { name: 'chip', label: 'CHIP', invertColor: false },
-  { name: 'snap', label: 'SNAP', invertColor: false },
-  { name: 'earned_income_tax_credit', label: 'Earned income tax credit', invertColor: false },
-  { name: 'ctc', label: 'Child tax credit', invertColor: false },
-  { name: 'income_tax', label: 'Federal income tax', invertColor: true },
-  { name: 'state_income_tax', label: 'State income tax', invertColor: true },
-  { name: 'employee_payroll_tax', label: 'Payroll tax', invertColor: true },
 ];
 
 const SKIP_METRICS = new Set(['slcsp', 'marketplace_net_premium']);
@@ -71,13 +64,6 @@ function buildLineItems(result: SimulationResult): {
 
   for (const spec of METRIC_ORDER) {
     if (SKIP_METRICS.has(spec.name)) continue;
-
-    if (spec.name === '__net_income__') {
-      const before = result.before.netIncome;
-      const after = result.after.netIncome;
-      rows.push({ label: spec.label, before, after, delta: after - before, invertColor: false });
-      continue;
-    }
 
     const beforeM = result.before.metrics?.find(m => m.name === spec.name);
     const afterM = result.after.metrics?.find(m => m.name === spec.name);
