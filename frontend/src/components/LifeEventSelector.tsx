@@ -65,6 +65,20 @@ export default function LifeEventSelector({
     return formatWithCommas(value);
   };
 
+  const getIncompatibilityMessage = (eventType: LifeEventType): string | null => {
+    const isMarried = household.filingStatus === 'married_jointly' || household.filingStatus === 'married_separately';
+    if (eventType === 'getting_married' && isMarried) {
+      return 'Your household is already married. Change your filing status to single to model this event.';
+    }
+    if (eventType === 'divorce' && !isMarried) {
+      return 'Your household is not married. Change your filing status to married to model this event.';
+    }
+    if (eventType === 'losing_esi' && !household.hasESI) {
+      return 'You don\'t currently have job-based coverage. Check "I currently have job-based health insurance" to model this event.';
+    }
+    return null;
+  };
+
   const renderEventParams = (event: LifeEvent) => {
     if (!selectedEvent || selectedEvent !== event.type) return null;
 
@@ -427,6 +441,14 @@ export default function LifeEventSelector({
                   )}
                 </div>
               </button>
+                {isSelected && (() => {
+                const msg = getIncompatibilityMessage(event.type);
+                return msg ? (
+                  <div className="mt-3 px-4 py-3 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-600">
+                    {msg}
+                  </div>
+                ) : null;
+              })()}
               {renderEventParams(event)}
             </div>
           );
