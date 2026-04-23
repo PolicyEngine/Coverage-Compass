@@ -270,14 +270,14 @@ export default function ResultsView({ result, eventType, onReset }: ResultsViewP
             {showAcaBefore && (
               <div className="space-y-3">
                 {showAcaAfter && <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Before</p>}
-                <PlanCostBlock label="Bronze plan" gross={acaBefore!.bronzeGross} net={acaBefore!.bronzeNet} ptc={acaBefore!.ptc} note="Estimated from state average bronze premiums — your actual plan may vary." />
+                <PlanCostBlock label="Bronze plan" gross={acaBefore!.bronzeGross} net={acaBefore!.bronzeNet} ptc={acaBefore!.ptc} note="Estimated from state average bronze premiums." />
                 <PlanCostBlock label="Silver plan" gross={acaBefore!.silverGross} net={acaBefore!.silverNet} ptc={acaBefore!.ptc} />
               </div>
             )}
             {showAcaAfter && (
               <div className="space-y-3">
                 {showAcaBefore && <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">After</p>}
-                <PlanCostBlock label="Bronze plan" gross={acaAfter!.bronzeGross} net={acaAfter!.bronzeNet} ptc={acaAfter!.ptc} note="Estimated from state average bronze premiums — your actual plan may vary." />
+                <PlanCostBlock label="Bronze plan" gross={acaAfter!.bronzeGross} net={acaAfter!.bronzeNet} ptc={acaAfter!.ptc} note="Estimated from state average bronze premiums." />
                 <PlanCostBlock label="Silver plan" gross={acaAfter!.silverGross} net={acaAfter!.silverNet} ptc={acaAfter!.ptc} />
               </div>
             )}
