@@ -138,8 +138,8 @@ export interface SimulationResult {
   healthcareBefore?: HealthcareCoverage;
   healthcareAfter?: HealthcareCoverage;
   acaPremiums?: {
-    before: { silverGross: number; silverNet: number; ptc: number };
-    after:  { silverGross: number; silverNet: number; ptc: number };
+    before: { silverGross: number; silverNet: number; bronzeGross: number; bronzeNet: number; ptc: number };
+    after:  { silverGross: number; silverNet: number; bronzeGross: number; bronzeNet: number; ptc: number };
   };
   event?: {
     name: string;

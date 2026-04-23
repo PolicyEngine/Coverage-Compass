@@ -6,6 +6,7 @@ from typing import Optional
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 
+from .aca_data import get_bronze_silver_ratio
 from .compare import compare, compare_multiple
 from .events import (
     ChildAgingOut,
@@ -194,22 +195,40 @@ def format_result_for_frontend(result) -> dict:
         response["healthcareAfter"] = result.healthcare_after.to_dict()
 
     # Add ACA premium breakdown when marketplace coverage is in play
-    slcsp_before = result.changes.get("slcsp")
-    slcsp_after = result.changes.get("slcsp")
-    net_before = result.changes.get("marketplace_net_premium")
-    net_after = result.changes.get("marketplace_net_premium")
+    slcsp_change = result.changes.get("slcsp")
+    net_change = result.changes.get("marketplace_net_premium")
     ptc_change = result.changes.get("premium_tax_credit")
-    if slcsp_before or slcsp_after:
+    if slcsp_change and (slcsp_change.before > 0 or slcsp_change.after > 0):
+        state = result.before_situation.get("households", {}).get("household", {}).get("state_code", {})
+        # state_code is stored as {year: "XX"} — extract the value
+        if isinstance(state, dict):
+            state = next(iter(state.values()), "US")
+        bronze_ratio = get_bronze_silver_ratio(state)
+
+        def _bronze_net(slcsp_annual: float, ptc_annual: float) -> float:
+            return max(0.0, slcsp_annual * bronze_ratio - ptc_annual)
+
+        slcsp_b = slcsp_change.before
+        slcsp_a = slcsp_change.after
+        ptc_b = ptc_change.before if ptc_change else 0
+        ptc_a = ptc_change.after if ptc_change else 0
+        net_b = net_change.before if net_change else 0
+        net_a = net_change.after if net_change else 0
+
         response["acaPremiums"] = {
             "before": {
-                "silverGross": slcsp_before.before if slcsp_before else 0,
-                "silverNet": net_before.before if net_before else 0,
-                "ptc": ptc_change.before if ptc_change else 0,
+                "silverGross": slcsp_b,
+                "silverNet": net_b,
+                "bronzeGross": slcsp_b * bronze_ratio,
+                "bronzeNet": _bronze_net(slcsp_b, ptc_b),
+                "ptc": ptc_b,
             },
             "after": {
-                "silverGross": slcsp_after.after if slcsp_after else 0,
-                "silverNet": net_after.after if net_after else 0,
-                "ptc": ptc_change.after if ptc_change else 0,
+                "silverGross": slcsp_a,
+                "silverNet": net_a,
+                "bronzeGross": slcsp_a * bronze_ratio,
+                "bronzeNet": _bronze_net(slcsp_a, ptc_a),
+                "ptc": ptc_a,
             },
         }
 

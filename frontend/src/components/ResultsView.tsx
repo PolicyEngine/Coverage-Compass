@@ -189,6 +189,19 @@ function FinancialRow({
   );
 }
 
+function PlanCostBlock({ label, gross, net, ptc }: { label: string; gross: number; net: number; ptc: number }) {
+  return (
+    <div className="bg-gray-50 rounded-lg px-4 py-3 space-y-1">
+      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">{label}</p>
+      <p className="text-sm text-gray-600">Full cost: <span className="font-medium text-gray-900">{formatMonthly(gross)}/mo</span></p>
+      {ptc > 0 && (
+        <p className="text-sm text-gray-600">Tax credit: <span className="font-medium text-[#2C7A7B]">−{formatMonthly(ptc)}/mo</span></p>
+      )}
+      <p className="text-sm font-semibold text-gray-900">Your cost: {formatMonthly(net)}/mo</p>
+    </div>
+  );
+}
+
 export default function ResultsView({ result, eventType, onReset }: ResultsViewProps) {
   if (!result?.before || !result?.after) {
     return (
@@ -241,38 +254,24 @@ export default function ResultsView({ result, eventType, onReset }: ResultsViewP
       {(showAcaBefore || showAcaAfter) && (
         <div className="card p-5 space-y-4">
           <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider">ACA Marketplace Plan Costs</h3>
-          <div className={`grid gap-4 ${showAcaBefore && showAcaAfter ? 'grid-cols-2' : 'grid-cols-1'}`}>
+          <div className={`grid gap-6 ${showAcaBefore && showAcaAfter ? 'grid-cols-2' : 'grid-cols-1'}`}>
             {showAcaBefore && (
-              <div className="space-y-1.5">
+              <div className="space-y-3">
                 {showAcaAfter && <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Before</p>}
-                <p className="text-sm text-gray-600">
-                  Silver plan: <span className="font-medium text-gray-900">{formatMonthly(acaBefore!.silverGross)}/month</span>
-                </p>
-                <p className="text-sm text-gray-600">
-                  Tax credit: <span className="font-medium text-[#2C7A7B]">−{formatMonthly(acaBefore!.ptc)}/month</span>
-                </p>
-                <p className="text-sm font-semibold text-gray-900">
-                  Your cost: {formatMonthly(acaBefore!.silverNet)}/month
-                </p>
+                <PlanCostBlock label="Bronze plan" gross={acaBefore!.bronzeGross} net={acaBefore!.bronzeNet} ptc={acaBefore!.ptc} />
+                <PlanCostBlock label="Silver plan" gross={acaBefore!.silverGross} net={acaBefore!.silverNet} ptc={acaBefore!.ptc} />
               </div>
             )}
             {showAcaAfter && (
-              <div className="space-y-1.5">
+              <div className="space-y-3">
                 {showAcaBefore && <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">After</p>}
-                <p className="text-sm text-gray-600">
-                  Silver plan: <span className="font-medium text-gray-900">{formatMonthly(acaAfter!.silverGross)}/month</span>
-                </p>
-                <p className="text-sm text-gray-600">
-                  Tax credit: <span className="font-medium text-[#2C7A7B]">−{formatMonthly(acaAfter!.ptc)}/month</span>
-                </p>
-                <p className="text-sm font-semibold text-gray-900">
-                  Your cost: {formatMonthly(acaAfter!.silverNet)}/month
-                </p>
+                <PlanCostBlock label="Bronze plan" gross={acaAfter!.bronzeGross} net={acaAfter!.bronzeNet} ptc={acaAfter!.ptc} />
+                <PlanCostBlock label="Silver plan" gross={acaAfter!.silverGross} net={acaAfter!.silverNet} ptc={acaAfter!.ptc} />
               </div>
             )}
           </div>
           <p className="text-xs text-gray-500 pt-1 border-t border-gray-100">
-            Bronze plans cost less per month but have higher deductibles and out-of-pocket costs. Gold and platinum plans cost more but cover more when you use care. Your tax credit applies to any metal tier.
+            Your tax credit applies to any metal tier. Bronze costs less per month but has higher deductibles; silver costs more but covers more of your care costs. Bronze estimate is based on state averages and will improve once rating-area data is available (<a href="https://github.com/PolicyEngine/policyengine-us/issues/8145" target="_blank" rel="noopener noreferrer" className="underline">tracked here</a>).
           </p>
         </div>
       )}
