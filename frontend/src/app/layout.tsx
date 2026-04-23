@@ -10,14 +10,14 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "Healthcare Crossroads | PolicyEngine",
+  title: "Coverage Compass | PolicyEngine",
   description: "Compare how household changes affect healthcare coverage and ACA support",
   icons: {
     icon: [{ url: "/icon.svg", type: "image/svg+xml" }],
     shortcut: "/icon.svg",
   },
   openGraph: {
-    title: "Healthcare Crossroads | PolicyEngine",
+    title: "Coverage Compass | PolicyEngine",
     description: "Compare how household changes affect healthcare coverage and ACA support",
     type: "website",
   },
