@@ -260,31 +260,6 @@ export default function ResultsView({ result, eventType, onReset }: ResultsViewP
         </div>
       )}
 
-      {(showAcaBefore || showAcaAfter) && (
-        <div className="card p-5 space-y-4">
-          <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider">ACA Marketplace Plan Costs</h3>
-          <div className={`grid gap-6 ${showAcaBefore && showAcaAfter ? 'grid-cols-2' : 'grid-cols-1'}`}>
-            {showAcaBefore && (
-              <div className="space-y-3">
-                {showAcaAfter && <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Before</p>}
-                <PlanCostBlock label="Bronze plan" gross={acaBefore!.bronzeGross} net={acaBefore!.bronzeNet} ptc={acaBefore!.ptc} note="Estimated from state average bronze premiums." />
-                <PlanCostBlock label="Silver plan" gross={acaBefore!.silverGross} net={acaBefore!.silverNet} ptc={acaBefore!.ptc} />
-              </div>
-            )}
-            {showAcaAfter && (
-              <div className="space-y-3">
-                {showAcaBefore && <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">After</p>}
-                <PlanCostBlock label="Bronze plan" gross={acaAfter!.bronzeGross} net={acaAfter!.bronzeNet} ptc={acaAfter!.ptc} note="Estimated from state average bronze premiums." />
-                <PlanCostBlock label="Silver plan" gross={acaAfter!.silverGross} net={acaAfter!.silverNet} ptc={acaAfter!.ptc} />
-              </div>
-            )}
-          </div>
-          <p className="text-xs text-gray-500 pt-1 border-t border-gray-100">
-            Your tax credit applies to any metal tier. Bronze costs less per month but has higher deductibles; silver costs more but covers more of your care costs.
-          </p>
-        </div>
-      )}
-
       <div className="card overflow-hidden">
         <table className="w-full border-collapse">
           <thead>
@@ -326,6 +301,31 @@ export default function ResultsView({ result, eventType, onReset }: ResultsViewP
           </tbody>
         </table>
       </div>
+
+      {(showAcaBefore || showAcaAfter) && (
+        <div className="card p-5 space-y-4">
+          <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider">ACA Marketplace Plan Costs</h3>
+          <div className={`grid gap-6 ${showAcaBefore && showAcaAfter ? 'grid-cols-2' : 'grid-cols-1'}`}>
+            {showAcaBefore && (
+              <div className="space-y-3">
+                {showAcaAfter && <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Before</p>}
+                <PlanCostBlock label="Bronze plan" gross={acaBefore!.bronzeGross} net={acaBefore!.bronzeNet} ptc={acaBefore!.ptc} note="Estimated from state average bronze premiums." />
+                <PlanCostBlock label="Silver plan" gross={acaBefore!.silverGross} net={acaBefore!.silverNet} ptc={acaBefore!.ptc} />
+              </div>
+            )}
+            {showAcaAfter && (
+              <div className="space-y-3">
+                {showAcaBefore && <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">After</p>}
+                <PlanCostBlock label="Bronze plan" gross={acaAfter!.bronzeGross} net={acaAfter!.bronzeNet} ptc={acaAfter!.ptc} note="Estimated from state average bronze premiums." />
+                <PlanCostBlock label="Silver plan" gross={acaAfter!.silverGross} net={acaAfter!.silverNet} ptc={acaAfter!.ptc} />
+              </div>
+            )}
+          </div>
+          <p className="text-xs text-gray-500 pt-1 border-t border-gray-100">
+            Your tax credit applies to any metal tier. Bronze costs less per month but has higher deductibles; silver costs more but covers more of your care costs.
+          </p>
+        </div>
+      )}
 
       <div className="flex justify-center pt-2">
         <button onClick={onReset} className="btn btn-secondary">
