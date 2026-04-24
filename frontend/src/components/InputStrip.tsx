@@ -470,7 +470,7 @@ function FilingPopover({ household, onHouseholdChange, onClose }: HouseholdPopov
 
 function AgePopover({ household, onHouseholdChange, onClose }: HouseholdPopoverProps) {
   const [age, setAge] = useState(String(household.age));
-  const [spouseAge, setSpouseAge] = useState(String(household.spouseAge));
+  const [spouseAge, setSpouseAge] = useState(String(household.spouseAge || household.age));
   const married = isMarried(household.filingStatus);
 
   const clamp = (v: string, min: number, max: number) => {
@@ -811,7 +811,7 @@ function EventPopover({
       }
 
       case 'getting_married': {
-        const spouseAge = (draftParams.spouseAge as number) ?? 30;
+        const spouseAge = (draftParams.spouseAge as number) ?? household.age;
         const spouseIncomeMonthly = Math.round(((draftParams.spouseIncome as number) ?? 0) / 12);
         const spouseHasESI = (draftParams.spouseHasESI as boolean) ?? false;
         return (
@@ -823,7 +823,7 @@ function EventPopover({
                 min={18}
                 max={100}
                 value={spouseAge}
-                onChange={(e) => updateParam('spouseAge', parseInt(e.target.value) || 30)}
+                onChange={(e) => updateParam('spouseAge', parseInt(e.target.value) || household.age)}
                 className="w-full text-sm border border-gray-200 rounded-md px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-[#319795]/30 focus:border-[#319795]"
               />
             </div>

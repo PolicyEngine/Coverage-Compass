@@ -289,9 +289,9 @@ export default function HouseholdForm({
                     type="number"
                     min="18"
                     max="100"
-                    value={editingField === 'spouseAge' ? editingValue : (household.spouseAge || 30)}
+                    value={editingField === 'spouseAge' ? editingValue : (household.spouseAge || household.age)}
                     onChange={(e) => handleNumberChange('spouseAge', e.target.value)}
-                    onFocus={() => handleNumberFocus('spouseAge', household.spouseAge || 30)}
+                    onFocus={() => handleNumberFocus('spouseAge', household.spouseAge || household.age)}
                     onBlur={() => handleNumberBlur('spouseAge', 18, 100)}
                     disabled={disabled}
                     className="input-field"
