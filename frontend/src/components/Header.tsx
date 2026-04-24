@@ -13,11 +13,17 @@ export default function Header() {
                 stroke="currentColor"
                 viewBox="0 0 24 24"
               >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
+                <circle cx="12" cy="12" r="10" strokeWidth={2} strokeLinecap="round" />
+                <polygon
+                  points="12,5 14.5,12 12,10.5 9.5,12"
+                  fill="currentColor"
+                  stroke="none"
+                />
+                <polygon
+                  points="12,19 9.5,12 12,13.5 14.5,12"
+                  fill="currentColor"
+                  fillOpacity={0.5}
+                  stroke="none"
                 />
               </svg>
             </div>
