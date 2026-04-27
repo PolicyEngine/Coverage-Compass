@@ -189,29 +189,8 @@ function FinancialRow({
   );
 }
 
-function PlanCostBlock({ label, gross, net, ptc, note }: { label: string; gross: number; net: number; ptc: number; note?: string }) {
-  return (
-    <div className="bg-gray-50 rounded-lg px-4 py-3 space-y-1">
-      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide flex items-center gap-1">
-        {label}
-        {note && (
-          <span className="relative group cursor-default">
-            <svg className="w-3.5 h-3.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-            <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 w-52 px-2.5 py-1.5 bg-gray-800 text-white text-xs rounded shadow-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10 normal-case font-normal tracking-normal">
-              {note}
-            </span>
-          </span>
-        )}
-      </p>
-      <p className="text-sm text-gray-600">Full cost: <span className="font-medium text-gray-900">{formatMonthly(gross)}/mo</span></p>
-      {ptc > 0 && (
-        <p className="text-sm text-gray-600">Tax credit: <span className="font-medium text-[#2C7A7B]">−{formatMonthly(ptc)}/mo</span></p>
-      )}
-      <p className="text-sm font-semibold text-gray-900">Your cost: {formatMonthly(net)}/mo</p>
-    </div>
-  );
+function fmt(annual: number) {
+  return formatCurrency(annual / 12);
 }
 
 export default function ResultsView({ result, eventType, onReset }: ResultsViewProps) {
@@ -303,26 +282,54 @@ export default function ResultsView({ result, eventType, onReset }: ResultsViewP
       </div>
 
       {(showAcaBefore || showAcaAfter) && (
-        <div className="card p-5 space-y-4">
-          <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider">ACA Marketplace Plan Costs</h3>
-          <div className={`grid gap-6 ${showAcaBefore && showAcaAfter ? 'grid-cols-2' : 'grid-cols-1'}`}>
-            {showAcaBefore && (
-              <div className="space-y-3">
-                {showAcaAfter && <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Before</p>}
-                <PlanCostBlock label="Bronze plan" gross={acaBefore!.bronzeGross} net={acaBefore!.bronzeNet} ptc={acaBefore!.ptc} note={acaBefore!.bronzeIsEstimate ? "Estimated from state average bronze premiums." : undefined} />
-                <PlanCostBlock label="Silver plan" gross={acaBefore!.silverGross} net={acaBefore!.silverNet} ptc={acaBefore!.ptc} />
-              </div>
-            )}
-            {showAcaAfter && (
-              <div className="space-y-3">
-                {showAcaBefore && <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">After</p>}
-                <PlanCostBlock label="Bronze plan" gross={acaAfter!.bronzeGross} net={acaAfter!.bronzeNet} ptc={acaAfter!.ptc} note={acaAfter!.bronzeIsEstimate ? "Estimated from state average bronze premiums." : undefined} />
-                <PlanCostBlock label="Silver plan" gross={acaAfter!.silverGross} net={acaAfter!.silverNet} ptc={acaAfter!.ptc} />
-              </div>
-            )}
-          </div>
-          <p className="text-xs text-gray-500 pt-1 border-t border-gray-100">
-            Your tax credit applies to any metal tier. Bronze costs less per month but has higher deductibles; silver costs more but covers more of your care costs.
+        <div className="card overflow-hidden">
+          <table className="w-full border-collapse">
+            <thead>
+              <tr className="border-b border-gray-200">
+                <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider w-36" />
+                <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider w-36" />
+                {showAcaBefore && <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Before</th>}
+                {showAcaAfter  && <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">After</th>}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              <SectionRow label="ACA marketplace plans" />
+              {([
+                { tier: 'Bronze', rowLabel: 'Full cost',   bVal: acaBefore?.bronzeGross, aVal: acaAfter?.bronzeGross },
+                { tier: 'Bronze', rowLabel: 'Tax credit',  bVal: acaBefore?.ptc,          aVal: acaAfter?.ptc,         credit: true },
+                { tier: 'Bronze', rowLabel: 'Your cost',   bVal: acaBefore?.bronzeNet,   aVal: acaAfter?.bronzeNet,   bold: true },
+                { tier: 'Silver', rowLabel: 'Full cost',   bVal: acaBefore?.silverGross, aVal: acaAfter?.silverGross },
+                { tier: 'Silver', rowLabel: 'Tax credit',  bVal: acaBefore?.ptc,          aVal: acaAfter?.ptc,         credit: true },
+                { tier: 'Silver', rowLabel: 'Your cost',   bVal: acaBefore?.silverNet,   aVal: acaAfter?.silverNet,   bold: true },
+              ] as { tier: string; rowLabel: string; bVal?: number; aVal?: number; credit?: boolean; bold?: boolean }[])
+                .filter(r => showAcaBefore ? (r.bVal ?? 0) > 0 : true)
+                .map((r, i) => {
+                  const isFirstInGroup = r.rowLabel === 'Full cost';
+                  return (
+                    <tr key={i} className={i % 6 < 3 ? 'bg-white' : 'bg-gray-50/50'}>
+                      <td className={`px-5 py-2 text-sm font-semibold text-gray-700 ${isFirstInGroup ? 'pt-3' : ''}`}>
+                        {isFirstInGroup ? r.tier : ''}
+                      </td>
+                      <td className={`px-5 py-2 text-sm text-gray-500 ${r.bold ? 'font-semibold text-gray-900' : ''} ${isFirstInGroup ? 'pt-3' : ''}`}>
+                        {r.rowLabel}
+                      </td>
+                      {showAcaBefore && (
+                        <td className={`px-5 py-2 text-sm tabular-nums ${r.credit ? 'text-[#2C7A7B]' : r.bold ? 'font-semibold text-gray-900' : 'text-gray-500'} ${isFirstInGroup ? 'pt-3' : ''}`}>
+                          {r.credit ? `−${fmt(r.bVal ?? 0)}` : fmt(r.bVal ?? 0)}/mo
+                        </td>
+                      )}
+                      {showAcaAfter && (
+                        <td className={`px-5 py-2 text-sm tabular-nums ${r.credit ? 'text-[#2C7A7B]' : r.bold ? 'font-semibold text-gray-900' : 'text-gray-500'} ${isFirstInGroup ? 'pt-3' : ''}`}>
+                          {r.credit ? `−${fmt(r.aVal ?? 0)}` : fmt(r.aVal ?? 0)}/mo
+                        </td>
+                      )}
+                    </tr>
+                  );
+                })}
+            </tbody>
+          </table>
+          <p className="px-5 py-3 text-xs text-gray-400 border-t border-gray-100">
+            Your tax credit applies to any metal tier. Bronze costs less per month but has higher deductibles; silver covers more of your care costs.
           </p>
         </div>
       )}
