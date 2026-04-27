@@ -178,7 +178,7 @@ export default function HouseholdWizard({ onComplete, onBack, onPartialChange }:
                 value={zip}
                 onChange={(e) => handleZipChange(e.target.value)}
                 className="input-field text-center text-2xl tracking-widest py-4"
-                placeholder="12345"
+                placeholder=""
                 autoFocus
               />
               {stateName && (
@@ -266,7 +266,7 @@ export default function HouseholdWizard({ onComplete, onBack, onPartialChange }:
                     }
                   }}
                   className="input-field text-lg"
-                  placeholder="35"
+                  placeholder=""
                   autoFocus
                 />
               </div>
@@ -286,7 +286,7 @@ export default function HouseholdWizard({ onComplete, onBack, onPartialChange }:
                       }
                     }}
                     className="input-field text-lg"
-                    placeholder="35"
+                    placeholder=""
                   />
                 </div>
               )}
@@ -326,7 +326,7 @@ export default function HouseholdWizard({ onComplete, onBack, onPartialChange }:
                     value={monthlyIncome}
                     onChange={(e) => setMonthlyIncome(e.target.value)}
                     className="currency-field text-lg"
-                    placeholder="3,000"
+                    placeholder=""
                     autoFocus
                   />
                 </div>
@@ -342,7 +342,7 @@ export default function HouseholdWizard({ onComplete, onBack, onPartialChange }:
                       value={partnerMonthlyIncome}
                       onChange={(e) => setPartnerMonthlyIncome(e.target.value)}
                       className="currency-field text-lg"
-                      placeholder="3,000"
+                      placeholder=""
                     />
                   </div>
                 </div>
@@ -459,7 +459,7 @@ export default function HouseholdWizard({ onComplete, onBack, onPartialChange }:
                       }
                     }}
                     className="input-field flex-1 py-2"
-                    placeholder="Age"
+                    placeholder=""
                   />
                   <button
                     type="button"
