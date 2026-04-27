@@ -1,7 +1,9 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import HouseholdWizard from '@/components/HouseholdWizard';
 import InputStrip from '@/components/InputStrip';
+import EventCards from '@/components/EventCards';
 import ResultsView from '@/components/ResultsView';
 import { Household, LifeEventType, SimulationResult, LIFE_EVENTS } from '@/types';
 
@@ -32,21 +34,8 @@ function decodeScenario(encoded: string): { household: Household; event: LifeEve
   return null;
 }
 
-const DEFAULT_HOUSEHOLD: Household = {
-  state: 'CA',
-  filingStatus: 'single',
-  income: 60000,
-  spouseIncome: 0,
-  spouseAge: 30,
-  childAges: [],
-  age: 30,
-  hasESI: false,
-  spouseHasESI: false,
-  year: 2026,
-};
-
 export default function Home() {
-  const [household, setHousehold] = useState<Household>(DEFAULT_HOUSEHOLD);
+  const [household, setHousehold] = useState<Household | null>(null);
   const [selectedEvent, setSelectedEvent] = useState<LifeEventType | null>(null);
   const [eventParams, setEventParams] = useState<Record<string, unknown>>({});
   const [result, setResult] = useState<SimulationResult | null>(null);
@@ -98,15 +87,23 @@ export default function Home() {
     }
   }, [runSimulation]);
 
+  const handleWizardComplete = (h: Household) => {
+    setHousehold(h);
+    setSelectedEvent(null);
+    setEventParams({});
+    setResult(null);
+    setError(null);
+  };
+
   const handleRun = () => {
-    if (selectedEvent) runSimulation(household, selectedEvent, eventParams);
+    if (household && selectedEvent) {
+      runSimulation(household, selectedEvent, eventParams);
+    }
   };
 
   const handleShare = async () => {
     if (!shareUrl) return;
-    try {
-      await navigator.clipboard.writeText(shareUrl);
-    } catch {
+    try { await navigator.clipboard.writeText(shareUrl); } catch {
       const input = document.createElement('input');
       input.value = shareUrl;
       document.body.appendChild(input);
@@ -119,6 +116,7 @@ export default function Home() {
   };
 
   const handleReset = () => {
+    setHousehold(null);
     setSelectedEvent(null);
     setEventParams({});
     setResult(null);
@@ -127,7 +125,6 @@ export default function Home() {
     window.history.replaceState({}, '', window.location.pathname);
   };
 
-  const canRun = selectedEvent !== null;
   const eventLabel = LIFE_EVENTS.find(e => e.type === selectedEvent)?.label;
 
   return (
@@ -136,7 +133,7 @@ export default function Home() {
 
         {/* Hero card */}
         <div className="bg-white border border-gray-200 rounded-xl p-7 shadow-sm mb-4 mt-6">
-          {result && selectedEvent ? (
+          {result && selectedEvent && household ? (
             <>
               <div className="inline-flex items-center gap-2 text-[11px] font-semibold tracking-widest uppercase text-[#285E61] bg-[#E6FFFA] px-3 py-1.5 rounded-full mb-3">
                 <span className="w-1.5 h-1.5 rounded-full bg-[#319795]" />
@@ -163,6 +160,19 @@ export default function Home() {
                 </button>
               </div>
             </>
+          ) : household ? (
+            <>
+              <div className="inline-flex items-center gap-2 text-[11px] font-semibold tracking-widest uppercase text-[#285E61] bg-[#E6FFFA] px-3 py-1.5 rounded-full mb-3">
+                <span className="w-1.5 h-1.5 rounded-full bg-[#319795]" />
+                Choose a coverage change
+              </div>
+              <h1 className="text-3xl font-bold tracking-tight text-gray-900 mb-2">
+                What coverage change do you want to model?
+              </h1>
+              <p className="text-[15px] text-gray-500 leading-relaxed">
+                Select a life event below, edit the details, and hit Calculate.
+              </p>
+            </>
           ) : (
             <>
               <div className="inline-flex items-center gap-2 text-[11px] font-semibold tracking-widest uppercase text-[#285E61] bg-[#E6FFFA] px-3 py-1.5 rounded-full mb-3">
@@ -173,28 +183,49 @@ export default function Home() {
                 See how a life event changes your healthcare coverage and costs.
               </h1>
               <p className="text-[15px] text-gray-500 leading-relaxed max-w-2xl">
-                Fill in your household below, pick a coverage change, and hit Run — we&apos;ll model it with PolicyEngine and give you the numbers.
+                Tell us about your household and we&apos;ll model it with PolicyEngine.
               </p>
             </>
           )}
         </div>
 
-        {/* Input strip */}
-        <InputStrip
-          household={household}
-          onHouseholdChange={setHousehold}
-          selectedEvent={selectedEvent}
-          onEventSelect={(e) => { setSelectedEvent(e); setEventParams({}); }}
-          eventParams={eventParams}
-          onParamsChange={setEventParams}
-          onRun={handleRun}
-          isLoading={isLoading}
-          canRun={canRun}
-        />
+        {/* Wizard (no household yet) */}
+        {!household && (
+          <HouseholdWizard onComplete={handleWizardComplete} />
+        )}
 
-        {/* Results area */}
+        {/* Household entered — show input strip + event cards */}
+        {household && (
+          <>
+            <InputStrip
+              household={household}
+              onHouseholdChange={(h) => { setHousehold(h); setResult(null); }}
+              selectedEvent={selectedEvent}
+              onEventSelect={(e) => { setSelectedEvent(e); setEventParams({}); setResult(null); }}
+              eventParams={eventParams}
+              onParamsChange={setEventParams}
+              onRun={handleRun}
+              isLoading={isLoading}
+              canRun={selectedEvent !== null}
+            />
+
+            <div className="mt-4">
+              <EventCards
+                household={household}
+                selectedEvent={selectedEvent}
+                onEventSelect={(e) => { setSelectedEvent(e); setEventParams({}); setResult(null); }}
+                eventParams={eventParams}
+                onParamsChange={setEventParams}
+                onRun={handleRun}
+                isLoading={isLoading}
+              />
+            </div>
+          </>
+        )}
+
+        {/* Loading */}
         {isLoading && (
-          <div className="bg-white border border-gray-200 rounded-xl p-12 shadow-sm flex flex-col items-center justify-center">
+          <div className="mt-4 bg-white border border-gray-200 rounded-xl p-12 shadow-sm flex flex-col items-center justify-center">
             <div className="relative mb-6">
               <div className="w-14 h-14 border-4 border-[#E6FFFA] rounded-full" />
               <div className="absolute inset-0 w-14 h-14 border-4 border-[#319795] border-t-transparent rounded-full animate-spin" />
@@ -205,34 +236,21 @@ export default function Home() {
           </div>
         )}
 
+        {/* Error */}
         {!isLoading && error && (
-          <div className="bg-white border border-gray-200 rounded-xl p-8 shadow-sm text-center">
+          <div className="mt-4 bg-white border border-gray-200 rounded-xl p-8 shadow-sm text-center">
             <p className="text-red-600 font-medium mb-1">Simulation failed</p>
             <p className="text-gray-500 text-sm mb-4">{error}</p>
-            <button onClick={handleRun} disabled={!canRun} className="text-sm text-[#319795] hover:text-[#285E61] font-medium">
+            <button onClick={handleRun} disabled={!selectedEvent} className="text-sm text-[#319795] hover:text-[#285E61] font-medium">
               Try again →
             </button>
           </div>
         )}
 
+        {/* Results */}
         {!isLoading && !error && result && selectedEvent && (
-          <ResultsView result={result} eventType={selectedEvent} onReset={handleReset} />
-        )}
-
-        {!isLoading && !error && !result && (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {['Headline impact', 'What changed', 'Analyst note'].map((title) => (
-              <div key={title} className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm overflow-hidden relative">
-                <p className="text-[10px] font-semibold uppercase tracking-widest text-gray-400 mb-3">{title}</p>
-                <div className="space-y-2">
-                  <div className="h-2.5 bg-gray-100 rounded w-2/5" />
-                  <div className="h-9 bg-gray-100 rounded w-3/5" />
-                  <div className="h-2.5 bg-gray-100 rounded w-4/5" />
-                  <div className="h-2.5 bg-gray-100 rounded w-3/5 mt-1" />
-                </div>
-                <div className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-white" />
-              </div>
-            ))}
+          <div className="mt-4">
+            <ResultsView result={result} eventType={selectedEvent} onReset={handleReset} />
           </div>
         )}
 
@@ -258,35 +276,27 @@ function getHeroHeadline(eventType: LifeEventType, result: SimulationResult): st
       if (anyMedicaidAfter) return 'Losing job coverage qualifies you for Medicaid.';
       if (ptcAfter > 0) return 'Losing job coverage makes you eligible for ACA marketplace subsidies.';
       return 'Losing job coverage opens a marketplace enrollment window.';
-
     case 'having_baby':
       if (anyMedicaidAfter && !anyMedicaidBefore) return 'Being pregnant triggers Medicaid eligibility.';
       if (anyMedicaidAfter) return 'Pregnancy strengthens your Medicaid eligibility.';
       return 'Being pregnant shifts your household eligibility thresholds.';
-
     case 'getting_married':
       if (ptcBefore > 0 && ptcAfter === 0) return 'Getting married pushes you over the ACA subsidy cliff.';
       if (anyMedicaidAfter && !anyMedicaidBefore) return 'Getting married qualifies your household for Medicaid.';
-      if (!anyMedicaidAfter && anyMedicaidBefore) return 'Getting married moves your household out of Medicaid.';
       if (netChangeMo > 100) return 'Getting married improves your household\'s net financial picture.';
       return 'Getting married changes your coverage and eligibility picture.';
-
     case 'divorce':
       if (anyMedicaidAfter && !anyMedicaidBefore) return 'Separating qualifies you for Medicaid as a single filer.';
       if (ptcAfter > 0 && ptcBefore === 0) return 'Separating makes you eligible for ACA marketplace subsidies.';
       return 'Separating changes your coverage options as a single filer.';
-
     case 'moving_states':
       if (anyMedicaidAfter && !anyMedicaidBefore) return 'Your new state\'s Medicaid rules cover your income.';
       if (!anyMedicaidAfter && anyMedicaidBefore) return 'Your new state has stricter Medicaid rules.';
       return 'Moving states changes which programs and premiums apply.';
-
     case 'changing_income':
       if (anyMedicaidAfter && !anyMedicaidBefore) return 'Your new income qualifies you for Medicaid.';
       if (!anyMedicaidAfter && anyMedicaidBefore) return 'Your new income moves you out of Medicaid.';
       if (ptcBefore > 0 && ptcAfter === 0) return 'Your new income crosses the ACA subsidy threshold.';
-      if (netChangeMo > 50) return 'Your higher income improves your net financial picture.';
-      if (netChangeMo < -50) return 'Your lower income affects your coverage and benefit eligibility.';
       return 'Your new income shifts your coverage and eligibility.';
   }
 }
