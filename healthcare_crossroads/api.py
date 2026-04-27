@@ -196,17 +196,15 @@ def format_result_for_frontend(result) -> dict:
 
     # Add ACA premium breakdown when marketplace coverage is in play
     slcsp_change = result.changes.get("slcsp")
+    lcbp_change  = result.changes.get("lcbp")
     net_change = result.changes.get("marketplace_net_premium")
     ptc_change = result.changes.get("premium_tax_credit")
     if slcsp_change and (slcsp_change.before > 0 or slcsp_change.after > 0):
+        # lcbp is accurate for 2026+; fall back to state-average ratio for earlier years
+        year = result.before_situation.get("households", {}).get("household", {}).get("state_code", {})
         state = result.before_situation.get("households", {}).get("household", {}).get("state_code", {})
-        # state_code is stored as {year: "XX"} — extract the value
         if isinstance(state, dict):
             state = next(iter(state.values()), "US")
-        bronze_ratio = get_bronze_silver_ratio(state)
-
-        def _bronze_net(slcsp_annual: float, ptc_annual: float) -> float:
-            return max(0.0, slcsp_annual * bronze_ratio - ptc_annual)
 
         slcsp_b = slcsp_change.before
         slcsp_a = slcsp_change.after
@@ -215,20 +213,32 @@ def format_result_for_frontend(result) -> dict:
         net_b = net_change.before if net_change else 0
         net_a = net_change.after if net_change else 0
 
+        # Use real lcbp if available and plausible (bronze < silver), else state average
+        lcbp_b = lcbp_change.before if lcbp_change else 0
+        lcbp_a = lcbp_change.after if lcbp_change else 0
+        use_real_bronze_b = lcbp_b > 0 and lcbp_b < slcsp_b
+        use_real_bronze_a = lcbp_a > 0 and lcbp_a < slcsp_a
+
+        bronze_ratio = get_bronze_silver_ratio(state)
+        bronze_b = lcbp_b if use_real_bronze_b else slcsp_b * bronze_ratio
+        bronze_a = lcbp_a if use_real_bronze_a else slcsp_a * bronze_ratio
+
         response["acaPremiums"] = {
             "before": {
                 "silverGross": slcsp_b,
                 "silverNet": net_b,
-                "bronzeGross": slcsp_b * bronze_ratio,
-                "bronzeNet": _bronze_net(slcsp_b, ptc_b),
+                "bronzeGross": bronze_b,
+                "bronzeNet": max(0.0, bronze_b - ptc_b),
                 "ptc": ptc_b,
+                "bronzeIsEstimate": not use_real_bronze_b,
             },
             "after": {
                 "silverGross": slcsp_a,
                 "silverNet": net_a,
-                "bronzeGross": slcsp_a * bronze_ratio,
-                "bronzeNet": _bronze_net(slcsp_a, ptc_a),
+                "bronzeGross": bronze_a,
+                "bronzeNet": max(0.0, bronze_a - ptc_a),
                 "ptc": ptc_a,
+                "bronzeIsEstimate": not use_real_bronze_a,
             },
         }
 

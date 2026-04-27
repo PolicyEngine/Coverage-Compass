@@ -44,6 +44,7 @@ OUTPUT_VARIABLES = [
     "chip",
     # ACA marketplace premiums
     "slcsp",               # gross silver benchmark plan (annual)
+    "lcbp",                # gross lowest-cost bronze plan (annual, 2026+ only)
     "marketplace_net_premium",  # net after PTC (annual)
     # Energy/utilities
     "liheap",  # Low Income Home Energy Assistance
