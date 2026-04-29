@@ -1,6 +1,6 @@
 'use client';
 
-import { BenefitMetric, HealthcareCoverage, LifeEventType, SimulationResult } from '@/types';
+import { BenefitMetric, LifeEventType, SimulationResult } from '@/types';
 
 interface ResultsViewProps {
   result: SimulationResult;
@@ -8,7 +8,30 @@ interface ResultsViewProps {
   onReset: () => void;
 }
 
-const SUPPORT_METRIC_NAMES = new Set(['premium_tax_credit', 'medicaid', 'chip']);
+// Per-month financial rows we surface in the statement table.
+const FINANCIAL_METRIC_NAMES = new Set([
+  'premium_tax_credit',
+  'marketplace_net_premium',
+  'medicaid',
+  'chip',
+]);
+
+// Each metric's category tag, for the small label shown next to the row name.
+const METRIC_CATEGORY: Record<string, string> = {
+  premium_tax_credit: 'tax credit',
+  marketplace_net_premium: 'premium',
+  medicaid: 'benefit',
+  chip: 'benefit',
+};
+
+// Each metric's diff-chip kind (drives the chip color + suffix word).
+type ChipKind = 'credit' | 'cost' | 'benefit';
+const METRIC_CHIP_KIND: Record<string, ChipKind> = {
+  premium_tax_credit: 'credit',
+  marketplace_net_premium: 'cost',
+  medicaid: 'benefit',
+  chip: 'benefit',
+};
 
 function formatCurrency(value: number): string {
   return new Intl.NumberFormat('en-US', {
@@ -18,179 +41,161 @@ function formatCurrency(value: number): string {
   }).format(value);
 }
 
-function formatMonthly(value: number): string {
-  return formatCurrency(value / 12);
-}
-
-function formatMonthlyChange(value: number): string {
-  const prefix = value >= 0 ? '+' : '';
-  return `${prefix}${formatMonthly(value)}`;
+function formatMonthly(annual: number): string {
+  return formatCurrency(annual / 12);
 }
 
 function getCoverageLabel(type: string | null): string {
   switch (type) {
     case 'ESI':
-      return 'Employer-Sponsored Insurance';
+      return 'Employer-sponsored';
     case 'Marketplace':
-      return 'ACA Marketplace';
+      return 'Marketplace';
+    case 'Medicaid':
+      return 'Medicaid';
+    case 'CHIP':
+      return 'CHIP';
     default:
-      return type || 'No insurance coverage';
+      return 'No coverage';
   }
 }
 
-function generateSummary(result: SimulationResult, eventType?: LifeEventType): string | null {
-  const metrics = result.before.metrics || [];
-  const ptcBefore = metrics.find(m => m.name === 'premium_tax_credit')?.before ?? 0;
-  const ptcAfter  = metrics.find(m => m.name === 'premium_tax_credit')?.after  ?? 0;
-
-  const anyMarketplaceAfter = (result.healthcareAfter?.people || []).some(p => p.coverage === 'Marketplace');
-  const anyMedicaidAfter    = (result.healthcareAfter?.people || []).some(p => p.coverage === 'Medicaid');
-  const anyMedicaidBefore   = (result.healthcareBefore?.people || []).some(p => p.coverage === 'Medicaid');
-
-  switch (eventType) {
-    case 'losing_esi':
-      if (anyMedicaidAfter) {
-        return 'Without employer coverage, your income qualifies you for Medicaid — there\'s no monthly premium.';
-      }
-      if (ptcAfter > 0) {
-        return `Without employer coverage, you qualify for a ${formatMonthly(ptcAfter)}/month ACA tax credit toward a marketplace plan.`;
-      }
-      return 'Without employer coverage, you can enroll in an ACA marketplace plan during a special enrollment period.';
-
-    case 'having_baby':
-      if (anyMedicaidAfter && !anyMedicaidBefore) {
-        return 'During pregnancy, your household size increases for eligibility purposes, qualifying you for Medicaid with no monthly premium.';
-      }
-      if (anyMedicaidAfter) {
-        return 'During pregnancy, your household size increases for eligibility purposes, which may strengthen your Medicaid eligibility.';
-      }
-      return 'During pregnancy, your household size increases for eligibility purposes. The baby\'s coverage would begin at birth.';
-
-    case 'getting_married': {
-      const netChange = result.diff.netIncome;
-      if (ptcAfter === 0 && ptcBefore > 0) {
-        return `Combining households raises your income above the ACA subsidy threshold, eliminating the ${formatMonthly(ptcBefore)}/month tax credit.`;
-      }
-      if (ptcAfter > ptcBefore) {
-        return `Combining households improves your ACA eligibility, increasing your tax credit to ${formatMonthly(ptcAfter)}/month.`;
-      }
-      if (netChange > 0) {
-        return `Combining households adds ${formatMonthly(netChange)}/month in net income to the household.`;
-      }
-      return 'Combining households changes your coverage options based on your new combined income.';
-    }
-
-    case 'divorce': {
-      if (anyMedicaidAfter && !anyMedicaidBefore) {
-        return 'As a single filer, your income qualifies you for Medicaid with no monthly premium.';
-      }
-      if (ptcAfter > 0) {
-        return `As a single filer, you qualify for an ACA tax credit of ${formatMonthly(ptcAfter)}/month toward a marketplace plan.`;
-      }
-      return 'After separating, your coverage is based on your individual income as a single filer.';
-    }
-
-    case 'moving_states':
-      if (anyMedicaidAfter && !anyMedicaidBefore) {
-        return 'Your new state qualifies you for Medicaid, which has no monthly premium.';
-      }
-      if (!anyMedicaidAfter && anyMedicaidBefore) {
-        return 'Your new state has different Medicaid eligibility rules — you no longer qualify.';
-      }
-      if (ptcAfter !== ptcBefore) {
-        return `Your new state changes your ACA tax credit from ${formatMonthly(ptcBefore)} to ${formatMonthly(ptcAfter)}/month.`;
-      }
-      return 'Your new state may have different benefit programs and eligibility rules.';
-
-    case 'changing_income': {
-      const ptcChange = ptcAfter - ptcBefore;
-      if (anyMedicaidAfter && !anyMedicaidBefore) {
-        return 'Your lower income now qualifies you for Medicaid with no monthly premium.';
-      }
-      if (!anyMedicaidAfter && anyMedicaidBefore) {
-        return 'Your higher income moves you out of Medicaid eligibility. You can enroll in an ACA marketplace plan instead.';
-      }
-      if (Math.abs(ptcChange) > 10) {
-        const direction = ptcChange > 0 ? 'increases' : 'reduces';
-        return `Your new income ${direction} your ACA tax credit by ${formatMonthly(Math.abs(ptcChange))}/month.`;
-      }
-      return null;
-    }
-
-    default:
-      return null;
+function CoveragePill({ type, exists }: { type: string | null; exists: boolean }) {
+  if (!exists) {
+    return <span className="text-sm text-gray-300">—</span>;
   }
-}
-
-function SectionRow({ label }: { label: string }) {
+  const label = getCoverageLabel(type);
+  const tone = type === null
+    ? 'bg-gray-50 text-gray-500 border-gray-200'
+    : 'bg-gray-100 text-gray-800 border-gray-200';
   return (
-    <tr className="bg-gray-50">
-      <td colSpan={4} className="px-5 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider">
-        {label}
+    <span className={`inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium border ${tone}`}>
+      {label}
+    </span>
+  );
+}
+
+function DiffChip({ kind, monthlyDelta }: { kind: ChipKind; monthlyDelta: number }) {
+  if (Math.abs(monthlyDelta) < 0.5) return null;
+  const sign = monthlyDelta > 0 ? '+' : '−';
+  const amount = formatCurrency(Math.abs(monthlyDelta));
+  const word = kind;
+  const tone =
+    kind === 'credit'
+      ? 'bg-[#E6FFFA] text-[#285E61]'
+      : kind === 'benefit'
+      ? 'bg-[#E6FFFA] text-[#285E61]'
+      : 'bg-amber-50 text-amber-800';
+  return (
+    <span className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium tabular-nums ${tone}`}>
+      {sign}{amount} {word}
+    </span>
+  );
+}
+
+function SectionLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <tr>
+      <td colSpan={3} className="px-5 pt-5 pb-2 text-[10px] font-semibold uppercase tracking-widest text-gray-400">
+        {children}
       </td>
     </tr>
   );
 }
 
-function CoverageRow({
+function PersonRow({
   label,
   beforeCoverage,
   afterCoverage,
   existsBefore,
   existsAfter,
-  striped,
 }: {
   label: string;
   beforeCoverage: string | null;
   afterCoverage: string | null;
   existsBefore: boolean;
   existsAfter: boolean;
-  striped: boolean;
 }) {
-  const beforeText = existsBefore ? getCoverageLabel(beforeCoverage) : '—';
-  const afterText = existsAfter ? getCoverageLabel(afterCoverage) : '—';
-  const changed = beforeCoverage !== afterCoverage || existsBefore !== existsAfter;
-
   return (
-    <tr className={striped ? 'bg-gray-50/50' : 'bg-white'}>
-      <td className="px-5 py-3 text-sm font-medium text-gray-800 w-40">{label}</td>
-      <td className="px-5 py-3 text-sm text-gray-500">{beforeText}</td>
-      <td className={`px-5 py-3 text-sm ${changed ? 'font-semibold text-[#2C7A7B]' : 'text-gray-500'}`}>
-        {afterText}
+    <tr className="border-t border-gray-100">
+      <td className="px-5 py-3 text-sm font-medium text-gray-900 align-middle w-44">{label}</td>
+      <td className="px-5 py-3 align-middle">
+        <div className="flex items-center gap-2 flex-wrap">
+          <CoveragePill type={beforeCoverage} exists={existsBefore} />
+          <span className="text-gray-300 text-sm">→</span>
+          <CoveragePill type={afterCoverage} exists={existsAfter} />
+        </div>
       </td>
-      <td className="px-5 py-3 text-sm text-gray-400" />
+      <td />
     </tr>
   );
 }
 
-function FinancialRow({
-  label,
-  before,
-  after,
-  striped,
+function MetricRow({
+  metric,
 }: {
-  label: string;
-  before: number;
-  after: number;
-  striped: boolean;
+  metric: BenefitMetric;
 }) {
-  const diff = after - before;
-  const tone = diff > 0 ? 'text-green-600' : diff < 0 ? 'text-red-600' : 'text-gray-400';
+  const category = METRIC_CATEGORY[metric.name] ?? metric.category.replace('_', ' ');
+  const chipKind = METRIC_CHIP_KIND[metric.name] ?? 'cost';
+  const monthlyBefore = metric.before / 12;
+  const monthlyAfter = metric.after / 12;
+  const monthlyDelta = monthlyAfter - monthlyBefore;
 
   return (
-    <tr className={striped ? 'bg-gray-50/50' : 'bg-white'}>
-      <td className="px-5 py-3 text-sm font-medium text-gray-800 w-40">{label}</td>
-      <td className="px-5 py-3 text-sm text-gray-500 tabular-nums">{formatMonthly(before)}</td>
-      <td className="px-5 py-3 text-sm text-gray-500 tabular-nums">{formatMonthly(after)}</td>
-      <td className={`px-5 py-3 text-sm font-semibold tabular-nums ${tone}`}>
-        {diff !== 0 ? formatMonthlyChange(diff) : '—'}
+    <tr className="border-t border-gray-100">
+      <td className="px-5 py-3 align-middle">
+        <div className="text-sm font-medium text-gray-900">{metric.label}</div>
+        <div className="text-[11px] text-gray-400">{category}</div>
+      </td>
+      <td className="px-5 py-3 align-middle text-sm tabular-nums text-gray-500">
+        {monthlyBefore === 0 ? <span className="text-gray-300">—</span> : `${formatCurrency(monthlyBefore)}/mo`}
+      </td>
+      <td className="px-5 py-3 align-middle">
+        <div className="flex items-center gap-2 justify-between flex-wrap">
+          <span className="text-sm tabular-nums text-gray-700">
+            {monthlyAfter === 0 ? <span className="text-gray-300">—</span> : `${formatCurrency(monthlyAfter)}/mo`}
+          </span>
+          <DiffChip kind={chipKind} monthlyDelta={monthlyDelta} />
+        </div>
       </td>
     </tr>
   );
 }
 
-function fmt(annual: number) {
-  return formatCurrency(annual / 12);
+function PlanCard({
+  tier,
+  gross,
+  ptc,
+  net,
+}: {
+  tier: 'Bronze' | 'Silver';
+  gross: number;
+  ptc: number;
+  net: number;
+}) {
+  const dotColor = tier === 'Bronze' ? 'bg-[#B45309]' : 'bg-[#64748B]';
+  return (
+    <div className="border border-gray-200 rounded-xl p-4 bg-white">
+      <div className="flex items-center gap-2 mb-3">
+        <span className={`w-2.5 h-2.5 rounded-sm ${dotColor}`} />
+        <span className="text-sm font-semibold text-gray-900">{tier}</span>
+      </div>
+      <div className="text-2xl font-bold text-gray-900 tabular-nums mb-0.5">
+        {formatCurrency(net / 12)} <span className="text-xs font-medium text-gray-500">/mo your cost</span>
+      </div>
+      <div className="border-t border-gray-100 mt-3 pt-3 space-y-1.5 text-xs text-gray-500">
+        <div className="flex justify-between">
+          <span>Full premium</span>
+          <span className="tabular-nums text-gray-700">{formatCurrency(gross / 12)}/mo</span>
+        </div>
+        <div className="flex justify-between">
+          <span>Your tax credit</span>
+          <span className="tabular-nums text-[#285E61]">−{formatCurrency(ptc / 12)}/mo</span>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export default function ResultsView({ result, eventType, onReset }: ResultsViewProps) {
@@ -204,132 +209,129 @@ export default function ResultsView({ result, eventType, onReset }: ResultsViewP
         </div>
         <h3 className="text-lg font-semibold text-gray-900 mb-2">Something went wrong</h3>
         <p className="text-gray-500 mb-4">The simulation returned incomplete data. Please try again.</p>
-        <button onClick={onReset} className="btn btn-primary">Try Again</button>
+        <button onClick={onReset} className="btn btn-primary">Try again</button>
       </div>
     );
   }
 
   const metrics = result.before.metrics || [];
-  const financialRows = metrics
-    .filter((m) => SUPPORT_METRIC_NAMES.has(m.name))
-    .filter((m) => m.before !== 0 || m.after !== 0)
-    .map((m: BenefitMetric) => ({ label: m.label, before: m.before, after: m.after }));
 
+  // Hero metric: monthly net premium cost (after applying tax credits).
+  const netPremiumMetric = metrics.find((m) => m.name === 'marketplace_net_premium');
+  const netBefore = (netPremiumMetric?.before ?? 0) / 12;
+  const netAfter = (netPremiumMetric?.after ?? 0) / 12;
+  const monthlyDelta = netAfter - netBefore;
+  const hasHero = Math.abs(netBefore) > 0.5 || Math.abs(netAfter) > 0.5;
+  const isCost = monthlyDelta > 0.5;
+  const isSavings = monthlyDelta < -0.5;
+  const heroTone = isCost ? 'text-red-600' : isSavings ? 'text-green-600' : 'text-gray-900';
+  const heroSign = isCost ? '+' : isSavings ? '−' : '';
+  const heroAmount = formatCurrency(Math.abs(monthlyDelta));
+
+  // Person rows.
   const isPregnancyScenario = eventType === 'having_baby';
   const beforeLabels = new Set((result.healthcareBefore?.people || []).map((p) => p.label));
   const afterLabels = new Set((result.healthcareAfter?.people || []).map((p) => p.label));
-  // For pregnancy, only show existing members — the fetus is not yet a person with coverage
   const allLabels = isPregnancyScenario
     ? Array.from(beforeLabels)
     : Array.from(new Set([...beforeLabels, ...afterLabels]));
 
-  const summary = generateSummary(result, eventType);
+  // Financial rows.
+  const financialMetrics = metrics
+    .filter((m) => FINANCIAL_METRIC_NAMES.has(m.name))
+    .filter((m) => m.before !== 0 || m.after !== 0);
 
-  // Show ACA premium callout when there's a non-zero silver plan in before or after
+  // ACA plan options.
   const acaBefore = result.acaPremiums?.before;
-  const acaAfter  = result.acaPremiums?.after;
-  const showAcaBefore = (acaBefore?.silverGross ?? 0) > 0;
-  const showAcaAfter  = (acaAfter?.silverGross  ?? 0) > 0;
+  const acaAfter = result.acaPremiums?.after;
+  const acaScope = acaAfter && (acaAfter.silverGross ?? 0) > 0 ? acaAfter : acaBefore;
+  const showAcaPlans = !!acaScope && (acaScope.silverGross ?? 0) > 0;
 
   return (
-    <div className="space-y-6">
-      {summary && (
-        <div className="card px-5 py-4 text-sm text-gray-700 border-l-4 border-[#319795] bg-[#F0FAFA]">
-          {summary}
+    <div className="space-y-4">
+      {/* Hero net-change card */}
+      {hasHero && (
+        <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm">
+          <div className="flex items-baseline gap-6 flex-wrap">
+            <div>
+              <div className="text-[10px] font-semibold uppercase tracking-widest text-gray-400 mb-1">
+                Net change
+              </div>
+              <div className={`text-4xl font-bold tabular-nums ${heroTone}`}>
+                {heroSign}{heroAmount}
+                <span className="text-base font-medium ml-1">/mo</span>
+              </div>
+            </div>
+            <p className="text-sm text-gray-500 leading-relaxed flex-1 min-w-[260px] max-w-prose">
+              After this event, your household&apos;s monthly out-of-pocket changes from{' '}
+              <b className="text-gray-700 tabular-nums">{formatCurrency(netBefore)}</b> to{' '}
+              <b className="text-gray-700 tabular-nums">{formatCurrency(netAfter)}</b>, after applying any tax credits.
+            </p>
+          </div>
         </div>
       )}
 
-      <div className="card overflow-hidden">
+      {/* Unified statement table */}
+      <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
         <table className="w-full border-collapse">
           <thead>
-            <tr className="border-b border-gray-200">
-              <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider w-40" />
-              <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Before</th>
-              <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">After</th>
-              <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Change</th>
+            <tr className="border-b border-gray-100 bg-gray-50/40">
+              <th className="px-5 py-3 text-left text-[10px] font-semibold text-gray-400 uppercase tracking-widest w-44">
+                Coverage
+              </th>
+              <th className="px-5 py-3 text-left text-[10px] font-semibold text-gray-400 uppercase tracking-widest w-1/3">
+                Before
+              </th>
+              <th className="px-5 py-3 text-left text-[10px] font-semibold text-gray-400 uppercase tracking-widest">
+                After
+              </th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-100">
-            <SectionRow label="Coverage" />
-            {allLabels.map((label, i) => {
+          <tbody>
+            <SectionLabel>Who is covered</SectionLabel>
+            {allLabels.map((label) => {
               const beforeCoverage = result.healthcareBefore?.people.find((p) => p.label === label)?.coverage ?? null;
               const afterCoverage = result.healthcareAfter?.people.find((p) => p.label === label)?.coverage ?? null;
               return (
-                <CoverageRow
+                <PersonRow
                   key={label}
                   label={label}
                   beforeCoverage={beforeCoverage}
                   afterCoverage={afterCoverage}
                   existsBefore={beforeLabels.has(label)}
                   existsAfter={afterLabels.has(label)}
-                  striped={i % 2 === 1}
                 />
               );
             })}
 
-            <SectionRow label="Financial (per month)" />
-            {financialRows.map(({ label, before, after }, i) => (
-              <FinancialRow
-                key={label}
-                label={label}
-                before={before}
-                after={after}
-                striped={i % 2 === 1}
-              />
-            ))}
+            {financialMetrics.length > 0 && (
+              <>
+                <SectionLabel>Per-month financial impact</SectionLabel>
+                {financialMetrics.map((m) => (
+                  <MetricRow key={m.name} metric={m} />
+                ))}
+              </>
+            )}
           </tbody>
         </table>
       </div>
 
-      {(showAcaBefore || showAcaAfter) && (
-        <div className="card overflow-hidden">
-          <table className="w-full border-collapse">
-            <thead>
-              <tr className="border-b border-gray-200">
-                <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider w-36" />
-                <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider w-36" />
-                {showAcaBefore && <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Before</th>}
-                {showAcaAfter  && <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">After</th>}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              <SectionRow label="ACA marketplace plans" />
-              {([
-                { tier: 'Bronze', rowLabel: 'Full cost',   bVal: acaBefore?.bronzeGross, aVal: acaAfter?.bronzeGross },
-                { tier: 'Bronze', rowLabel: 'Tax credit',  bVal: acaBefore?.ptc,          aVal: acaAfter?.ptc,         credit: true },
-                { tier: 'Bronze', rowLabel: 'Your cost',   bVal: acaBefore?.bronzeNet,   aVal: acaAfter?.bronzeNet,   bold: true },
-                { tier: 'Silver', rowLabel: 'Full cost',   bVal: acaBefore?.silverGross, aVal: acaAfter?.silverGross },
-                { tier: 'Silver', rowLabel: 'Tax credit',  bVal: acaBefore?.ptc,          aVal: acaAfter?.ptc,         credit: true },
-                { tier: 'Silver', rowLabel: 'Your cost',   bVal: acaBefore?.silverNet,   aVal: acaAfter?.silverNet,   bold: true },
-              ] as { tier: string; rowLabel: string; bVal?: number; aVal?: number; credit?: boolean; bold?: boolean }[])
-                .filter(r => showAcaBefore ? (r.bVal ?? 0) > 0 : true)
-                .map((r, i) => {
-                  const isFirstInGroup = r.rowLabel === 'Full cost';
-                  return (
-                    <tr key={i} className={i % 6 < 3 ? 'bg-white' : 'bg-gray-50/50'}>
-                      <td className={`px-5 py-2 text-sm font-semibold text-gray-700 ${isFirstInGroup ? 'pt-3' : ''}`}>
-                        {isFirstInGroup ? r.tier : ''}
-                      </td>
-                      <td className={`px-5 py-2 text-sm text-gray-500 ${r.bold ? 'font-semibold text-gray-900' : ''} ${isFirstInGroup ? 'pt-3' : ''}`}>
-                        {r.rowLabel}
-                      </td>
-                      {showAcaBefore && (
-                        <td className={`px-5 py-2 text-sm tabular-nums ${r.credit ? 'text-[#2C7A7B]' : r.bold ? 'font-semibold text-gray-900' : 'text-gray-500'} ${isFirstInGroup ? 'pt-3' : ''}`}>
-                          {r.credit ? `−${fmt(r.bVal ?? 0)}` : fmt(r.bVal ?? 0)}/mo
-                        </td>
-                      )}
-                      {showAcaAfter && (
-                        <td className={`px-5 py-2 text-sm tabular-nums ${r.credit ? 'text-[#2C7A7B]' : r.bold ? 'font-semibold text-gray-900' : 'text-gray-500'} ${isFirstInGroup ? 'pt-3' : ''}`}>
-                          {r.credit ? `−${fmt(r.aVal ?? 0)}` : fmt(r.aVal ?? 0)}/mo
-                        </td>
-                      )}
-                    </tr>
-                  );
-                })}
-            </tbody>
-          </table>
-          <p className="px-5 py-3 text-xs text-gray-400 border-t border-gray-100">
-            Your tax credit applies to any metal tier. Bronze costs less per month but has higher deductibles; silver covers more of your care costs.
+      {/* ACA marketplace plans sub-card */}
+      {showAcaPlans && acaScope && (
+        <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
+          <div className="flex items-baseline justify-between mb-3 gap-4 flex-wrap">
+            <div>
+              <h3 className="text-sm font-semibold text-gray-900">ACA marketplace plan options</h3>
+              <p className="text-[11px] text-gray-400 mt-0.5">Same tax credit applies to any tier</p>
+            </div>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <PlanCard tier="Bronze" gross={acaScope.bronzeGross} ptc={acaScope.ptc} net={acaScope.bronzeNet} />
+            <PlanCard tier="Silver" gross={acaScope.silverGross} ptc={acaScope.ptc} net={acaScope.silverNet} />
+          </div>
+          <p className="text-[11px] text-gray-400 mt-3 leading-relaxed">
+            Bronze costs less per month but has higher deductibles. Silver covers more of your care costs and is the basis
+            for cost-sharing reductions if you qualify.
           </p>
         </div>
       )}
@@ -339,7 +341,7 @@ export default function ResultsView({ result, eventType, onReset }: ResultsViewP
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
           </svg>
-          Try Another Scenario
+          Try another scenario
         </button>
       </div>
     </div>
