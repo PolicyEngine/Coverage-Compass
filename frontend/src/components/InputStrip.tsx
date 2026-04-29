@@ -491,16 +491,45 @@ function FilingDiffPopover({ household, selectedEvent, eventParams, onEventSelec
   const [spouseAge, setSpouseAge] = useState(String((eventParams.spouseAge as number) ?? ''));
   const [spouseIncomeMo, setSpouseIncomeMo] = useState(String(Math.round(((eventParams.spouseIncome as number) ?? 0) / 12)));
   const [spouseHasESI, setSpouseHasESI] = useState((eventParams.spouseHasESI as boolean) ?? false);
+  const [spouseChildAges, setSpouseChildAges] = useState<Array<number | ''>>(
+    (eventParams.spouseChildAges as number[] | undefined) ?? [],
+  );
   const [esiProvider, setEsiProvider] = useState((eventParams.esiProvider as string) ?? 'both');
   const [childrenKeeping, setChildrenKeeping] = useState((eventParams.childrenKeeping as number) ?? household.childAges.length);
 
-  function selectGetMarried() {
+  function selectGetMarried(overrides: { spouseChildAges?: number[] } = {}) {
+    const ages = overrides.spouseChildAges ?? spouseChildAges.map(a => (a === '' ? 0 : a));
     onEventSelect('getting_married');
     onParamsChange({
       spouseAge: parseInt(spouseAge) || 30,
       spouseIncome: parseInt(spouseIncomeMo) * 12 || 0,
       spouseHasESI,
+      spouseChildAges: ages,
     });
+  }
+
+  function addSpouseChild() {
+    if (spouseChildAges.length >= 10) return;
+    const next = [...spouseChildAges, 0 as number | ''];
+    setSpouseChildAges(next);
+    selectGetMarried({ spouseChildAges: next.map(a => (a === '' ? 0 : a)) });
+  }
+
+  function removeSpouseChild(index: number) {
+    const next = spouseChildAges.filter((_, i) => i !== index);
+    setSpouseChildAges(next);
+    selectGetMarried({ spouseChildAges: next.map(a => (a === '' ? 0 : a)) });
+  }
+
+  function updateSpouseChildAge(index: number, value: string) {
+    const next = [...spouseChildAges];
+    if (value === '') {
+      next[index] = '';
+    } else {
+      const parsed = parseInt(value, 10);
+      next[index] = isNaN(parsed) ? '' : Math.min(17, Math.max(0, parsed));
+    }
+    setSpouseChildAges(next);
   }
 
   function selectDivorce() {
@@ -519,7 +548,7 @@ function FilingDiffPopover({ household, selectedEvent, eventParams, onEventSelec
         <BeforeValue>Now: Single</BeforeValue>
         <button
           type="button"
-          onClick={selectGetMarried}
+          onClick={() => selectGetMarried()}
           className={`w-full text-left px-3 py-2.5 rounded-lg border-2 font-medium text-sm mb-2 transition-all ${isGettingMarried ? 'border-[#319795] bg-[#E6FFFA] text-[#285E61]' : 'border-gray-200 hover:border-[#319795]/50'}`}
         >
           Getting married
@@ -538,6 +567,49 @@ function FilingDiffPopover({ household, selectedEvent, eventParams, onEventSelec
               <input type="checkbox" checked={spouseHasESI} onChange={(e) => { setSpouseHasESI(e.target.checked); selectGetMarried(); }} className="accent-[#319795]" />
               Partner has employer insurance
             </label>
+            <Row label="Partner's children (under 18)">
+              <div className="flex flex-col gap-2">
+                {spouseChildAges.length === 0 && (
+                  <p className="text-xs text-gray-400">None</p>
+                )}
+                {spouseChildAges.map((age, i) => (
+                  <div key={i} className="flex items-center gap-2">
+                    <span className="text-xs text-gray-500 w-12 shrink-0">Child {i + 1}</span>
+                    <input
+                      type="number"
+                      min={0}
+                      max={17}
+                      value={age}
+                      onChange={(e) => updateSpouseChildAge(i, e.target.value)}
+                      onBlur={() => selectGetMarried()}
+                      className={inputClass('flex-1 py-1.5')}
+                      placeholder="age"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => removeSpouseChild(i)}
+                      className="p-1 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded"
+                      aria-label={`Remove partner's child ${i + 1}`}
+                    >
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
+                ))}
+                <button
+                  type="button"
+                  onClick={addSpouseChild}
+                  disabled={spouseChildAges.length >= 10}
+                  className="self-start inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-[#2C7A7B] bg-[#E6FFFA] hover:bg-[#B2F5EA] disabled:opacity-50 disabled:cursor-not-allowed rounded transition-colors"
+                >
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
+                  </svg>
+                  Add child
+                </button>
+              </div>
+            </Row>
             <button type="button" onClick={() => { selectGetMarried(); onClose(); onRun(); }} className="w-full py-2 text-sm font-semibold bg-[#319795] text-white rounded-lg hover:bg-[#2C7A7B] transition-colors mt-1">
               Apply
             </button>
