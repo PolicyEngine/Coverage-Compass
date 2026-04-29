@@ -34,7 +34,7 @@ function getCoverageLabel(type: string | null): string {
     case 'Marketplace':
       return 'ACA Marketplace';
     default:
-      return type || '—';
+      return type || 'No insurance coverage';
   }
 }
 
