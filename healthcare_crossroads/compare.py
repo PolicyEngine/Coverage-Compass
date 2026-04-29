@@ -9,6 +9,7 @@ from typing import Any
 from policyengine_us import Simulation
 
 from .events.base import LifeEvent
+from .events.divorce import Divorce
 from .events.marriage import Marriage
 from .household import Household, Person
 
@@ -534,6 +535,88 @@ def _extract_counterfactual_before_coverage(
     )
 
 
+def _extract_counterfactual_after_coverage(
+    household: Household,
+    after_household: Household,
+    event: LifeEvent,
+) -> HealthcareCoverage | None:
+    """Estimate post-event coverage for the ex-spouse (and children leaving with them)."""
+    if not isinstance(event, Divorce):
+        return None
+
+    # Find the spouse and their original index in the pre-divorce household.
+    spouse_index = None
+    for i, member in enumerate(household.members):
+        if member.is_tax_unit_spouse:
+            spouse_index = i
+            break
+    if spouse_index is None:
+        return None
+
+    spouse = household.members[spouse_index]
+
+    # Children leaving with the spouse, with their original-household indices.
+    leaving_child_indices = list(event.children_leave_with_spouse or [])
+
+    # Build the ex-spouse's post-divorce household: ex-spouse becomes head,
+    # plus any children who leave with them. Reset role flags on the children.
+    ex_spouse_member = Person(
+        age=spouse.age,
+        employment_income=spouse.employment_income,
+        self_employment_income=spouse.self_employment_income,
+        social_security_retirement=spouse.social_security_retirement,
+        unemployment_compensation=spouse.unemployment_compensation,
+        is_pregnant=spouse.is_pregnant,
+        is_tax_unit_head=True,
+        is_tax_unit_spouse=False,
+        has_esi=event.head_loses_esi,
+    )
+    members = [ex_spouse_member]
+    original_indices = [spouse_index]
+    for child_idx in leaving_child_indices:
+        child = deepcopy(household.members[child_idx])
+        child.is_tax_unit_head = False
+        child.is_tax_unit_spouse = False
+        members.append(child)
+        original_indices.append(child_idx)
+
+    ex_spouse_household = Household(
+        state=household.state,
+        members=members,
+        year=household.year,
+        county=household.county,
+        zip_code=household.zip_code,
+    )
+    _, ex_spouse_sim = _run_simulation(
+        ex_spouse_household.to_situation(), ex_spouse_household.year
+    )
+    ex_spouse_coverage = _extract_healthcare_coverage(
+        ex_spouse_sim,
+        ex_spouse_household,
+        ex_spouse_household.year,
+    )
+
+    # Remap each person back into the *original* household's index/label space,
+    # since the ex-spouse and leaving children appear there (not in the after household).
+    remapped_people = []
+    for person, original_index in zip(ex_spouse_coverage.people, original_indices):
+        remapped_people.append(
+            PersonHealthcare(
+                person_index=original_index,
+                label=_get_person_label(original_index, household),
+                medicaid=person.medicaid,
+                chip=person.chip,
+                marketplace=person.marketplace,
+                esi=person.esi,
+            )
+        )
+
+    return HealthcareCoverage(
+        people=remapped_people,
+        has_ptc=ex_spouse_coverage.has_ptc,
+    )
+
+
 def _merge_healthcare_coverage(
     primary: HealthcareCoverage,
     extra: HealthcareCoverage | None,
@@ -549,6 +632,38 @@ def _merge_healthcare_coverage(
     return HealthcareCoverage(
         people=sorted(merged_people.values(), key=lambda person: person.person_index),
         has_ptc=primary.has_ptc or extra.has_ptc,
+    )
+
+
+@dataclass
+class BaselineResult:
+    """Result of running only the baseline (before-event) simulation.
+
+    Used to pre-warm the baseline during the user's "thinking time" so that
+    when they apply a life event, only the after-sim is needed.
+    """
+
+    situation: dict[str, Any]
+    results: dict[str, float]
+    healthcare: HealthcareCoverage | None
+    household: Household
+
+
+def run_baseline(household: Household) -> BaselineResult:
+    """Run only the baseline (no-event) simulation for a household.
+
+    Returns a BaselineResult with the before-results and per-person
+    healthcare coverage. Intended to be cached client-side and reused
+    when the user finally applies a life event.
+    """
+    situation = household.to_situation()
+    results, sim = _run_simulation(situation, household.year)
+    healthcare = _extract_healthcare_coverage(sim, household, household.year)
+    return BaselineResult(
+        situation=situation,
+        results=results,
+        healthcare=healthcare,
+        household=household,
     )
 
 
@@ -592,6 +707,10 @@ def compare(
     healthcare_before = _merge_healthcare_coverage(
         healthcare_before,
         _extract_counterfactual_before_coverage(household, after_household, event),
+    )
+    healthcare_after = _merge_healthcare_coverage(
+        healthcare_after,
+        _extract_counterfactual_after_coverage(household, after_household, event),
     )
 
     # Build changes dictionary

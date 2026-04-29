@@ -46,7 +46,14 @@ const EVENT_CHIP: Partial<Record<LifeEventType, string>> = {
   divorce: 'filing',
   losing_esi: 'esi',
   having_baby: 'children',
+  ending_pregnancy: 'children',
 };
+
+function pregnancyLabel(h: Household): string | null {
+  if (h.pregnantMember === 'head') return 'You';
+  if (h.pregnantMember === 'spouse') return 'Partner';
+  return null;
+}
 
 interface ChipProps {
   label: string;
@@ -204,8 +211,15 @@ export default function InputStrip({
   })();
 
   const childrenAfter = (() => {
-    if (selectedEvent !== 'having_baby') return undefined;
-    return `+1 baby`;
+    if (selectedEvent === 'having_baby') {
+      const idx = (eventParams.pregnantMemberIndex as number) ?? 0;
+      const who = married ? (idx === 0 ? 'You' : 'Partner') : 'You';
+      return `Pregnant: ${who}`;
+    }
+    if (selectedEvent === 'ending_pregnancy') {
+      return 'Not pregnant';
+    }
+    return undefined;
   })();
 
   const locationBefore = `${household.state}${household.zipCode ? ' · ' + household.zipCode : ''}`;
@@ -218,9 +232,13 @@ export default function InputStrip({
   const esiBefore = getEsiLabel(household);
   const childrenBefore = (() => {
     const n = household.childAges.length;
-    if (n === 0) return 'None';
-    if (n === 1) return `1 (age ${household.childAges[0]})`;
-    return `${n} (ages ${household.childAges.join(', ')})`;
+    const pregLabel = pregnancyLabel(household);
+    const childPart =
+      n === 0 ? 'None'
+      : n === 1 ? `1 (age ${household.childAges[0]})`
+      : `${n} (ages ${household.childAges.join(', ')})`;
+    if (pregLabel) return `${childPart} · Pregnant: ${pregLabel}`;
+    return childPart;
   })();
   const selectedEventObj = LIFE_EVENTS.find(e => e.type === selectedEvent);
 
@@ -649,14 +667,45 @@ function EsiDiffPopover({ household, selectedEvent, onEventSelect, onParamsChang
 // CHILDREN diff popover
 function ChildrenDiffPopover({ household, selectedEvent, eventParams, onEventSelect, onParamsChange, onClear, onClose, onRun }: DiffPopoverProps) {
   const married = isMarried(household.filingStatus);
-  const isActive = selectedEvent === 'having_baby';
+  const isHavingBaby = selectedEvent === 'having_baby';
+  const isEndingPregnancy = selectedEvent === 'ending_pregnancy';
   const pregnantIndex = (eventParams.pregnantMemberIndex as number) ?? 0;
+  const currentlyPregnant = household.pregnantMember === 'head' || household.pregnantMember === 'spouse';
+  const currentPregnantIdx = household.pregnantMember === 'spouse' ? 1 : 0;
+  const currentPregnantLabel = household.pregnantMember === 'head'
+    ? 'You'
+    : household.pregnantMember === 'spouse' ? 'Partner' : null;
 
   function selectBaby(idx: number) {
     onEventSelect('having_baby');
     onParamsChange({ pregnantMemberIndex: idx });
     onClose();
     onRun();
+  }
+
+  function selectEndPregnancy() {
+    onEventSelect('ending_pregnancy');
+    onParamsChange({ pregnantMemberIndex: currentPregnantIdx });
+    onClose();
+    onRun();
+  }
+
+  // If already pregnant per household status, the natural action is "no longer pregnant".
+  if (currentlyPregnant) {
+    return (
+      <div>
+        <SectionLabel>Pregnancy status</SectionLabel>
+        <BeforeValue>Now: Pregnant ({currentPregnantLabel})</BeforeValue>
+        <button
+          type="button"
+          onClick={selectEndPregnancy}
+          className={`w-full text-left px-3 py-2.5 rounded-lg border-2 font-medium text-sm transition-all ${isEndingPregnancy ? 'border-[#319795] bg-[#E6FFFA] text-[#285E61]' : 'border-gray-200 hover:border-[#319795]/50'}`}
+        >
+          No longer pregnant
+        </button>
+        {isEndingPregnancy && <ClearButton onClick={onClear} />}
+      </div>
+    );
   }
 
   return (
@@ -669,7 +718,7 @@ function ChildrenDiffPopover({ household, selectedEvent, eventParams, onEventSel
         <button
           type="button"
           onClick={() => selectBaby(0)}
-          className={`w-full text-left px-3 py-2.5 rounded-lg border-2 font-medium text-sm transition-all ${isActive ? 'border-[#319795] bg-[#E6FFFA] text-[#285E61]' : 'border-gray-200 hover:border-[#319795]/50'}`}
+          className={`w-full text-left px-3 py-2.5 rounded-lg border-2 font-medium text-sm transition-all ${isHavingBaby ? 'border-[#319795] bg-[#E6FFFA] text-[#285E61]' : 'border-gray-200 hover:border-[#319795]/50'}`}
         >
           I&apos;m currently pregnant
         </button>
@@ -683,14 +732,14 @@ function ChildrenDiffPopover({ household, selectedEvent, eventParams, onEventSel
               key={opt.idx}
               type="button"
               onClick={() => selectBaby(opt.idx)}
-              className={`w-full text-left px-3 py-2.5 rounded-lg border-2 font-medium text-sm transition-all ${isActive && pregnantIndex === opt.idx ? 'border-[#319795] bg-[#E6FFFA] text-[#285E61]' : 'border-gray-200 hover:border-[#319795]/50'}`}
+              className={`w-full text-left px-3 py-2.5 rounded-lg border-2 font-medium text-sm transition-all ${isHavingBaby && pregnantIndex === opt.idx ? 'border-[#319795] bg-[#E6FFFA] text-[#285E61]' : 'border-gray-200 hover:border-[#319795]/50'}`}
             >
               {opt.label}
             </button>
           ))}
         </div>
       )}
-      {isActive && <ClearButton onClick={onClear} />}
+      {isHavingBaby && <ClearButton onClick={onClear} />}
     </div>
   );
 }

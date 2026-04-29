@@ -75,6 +75,7 @@ export interface Household {
 
 export type LifeEventType =
   | 'having_baby'
+  | 'ending_pregnancy'
   | 'moving_states'
   | 'getting_married'
   | 'changing_income'
@@ -144,6 +145,11 @@ export const LIFE_EVENTS: LifeEvent[] = [
     type: 'having_baby',
     label: 'Being Pregnant',
     description: 'See how pregnancy affects your Medicaid eligibility and coverage right now',
+  },
+  {
+    type: 'ending_pregnancy',
+    label: 'No Longer Pregnant',
+    description: 'See how coverage shifts once pregnancy ends',
   },
   {
     type: 'getting_married',

@@ -3,6 +3,7 @@
 from .base import LifeEvent
 from .child_aging_out import AgingOutType, ChildAgingOut
 from .divorce import Divorce
+from .ending_pregnancy import EndingPregnancy
 from .job_change import JobChange
 from .losing_esi import ESILossType, LosingESI
 from .marriage import Marriage
@@ -17,6 +18,7 @@ __all__ = [
     "AgingOutType",
     "ChildAgingOut",
     "Divorce",
+    "EndingPregnancy",
     "ESILossType",
     "JobChange",
     "LifeEvent",

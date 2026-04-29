@@ -1,10 +1,18 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import HouseholdWizard from '@/components/HouseholdWizard';
 import InputStrip from '@/components/InputStrip';
 import ResultsView from '@/components/ResultsView';
 import { Household, LifeEventType, SimulationResult, LIFE_EVENTS } from '@/types';
+
+interface CachedBaseline {
+  householdHash: string;
+  metrics?: unknown;
+  netIncome?: number;
+  healthcareBefore?: unknown;
+  acaPremiums?: { before?: unknown };
+}
 
 function encodeScenario(household: Household, event: LifeEventType, params: Record<string, unknown>): string {
   return btoa(JSON.stringify({ h: household, e: event, p: params }));
@@ -44,6 +52,31 @@ export default function Home() {
   const [shareUrl, setShareUrl] = useState<string | null>(null);
   const [showCopied, setShowCopied] = useState(false);
 
+  // Pre-warmed baseline cache. Populated by /api/baseline during the user's
+  // "thinking time" between wizard completion and Apply, then sent with the
+  // simulate request so the server can skip the before-sim.
+  const baselineCacheRef = useRef<CachedBaseline | null>(null);
+  const baselineHouseholdRef = useRef<Household | null>(null);
+
+  const prewarmBaseline = useCallback(async (h: Household) => {
+    baselineCacheRef.current = null;
+    baselineHouseholdRef.current = h;
+    try {
+      const response = await fetch('/api/baseline', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ household: h }),
+      });
+      if (!response.ok) return;
+      const data = await response.json();
+      if (data?.householdHash && baselineHouseholdRef.current === h) {
+        baselineCacheRef.current = data as CachedBaseline;
+      }
+    } catch {
+      // Pre-warm is opportunistic; ignore failures and fall back to full sim.
+    }
+  }, []);
+
   const runSimulation = useCallback(async (
     h: Household,
     event: LifeEventType,
@@ -53,10 +86,18 @@ export default function Home() {
     setError(null);
     setResult(null);
     try {
+      const cachedBefore =
+        baselineCacheRef.current && baselineHouseholdRef.current === h
+          ? baselineCacheRef.current
+          : undefined;
       const response = await fetch('/api/simulate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ household: h, lifeEvent: { type: event, params } }),
+        body: JSON.stringify({
+          household: h,
+          lifeEvent: { type: event, params },
+          ...(cachedBefore ? { cachedBefore } : {}),
+        }),
       });
       const data = await response.json();
       if (data.error) throw new Error(data.error);
@@ -93,6 +134,10 @@ export default function Home() {
     setEventParams({});
     setResult(null);
     setError(null);
+    // Pre-warm the baseline simulation in the background while the user
+    // picks a life event. By the time they click Apply, only the after-sim
+    // is needed.
+    prewarmBaseline(h);
   };
 
   const handleRun = () => {
@@ -122,6 +167,8 @@ export default function Home() {
     setResult(null);
     setError(null);
     setShareUrl(null);
+    baselineCacheRef.current = null;
+    baselineHouseholdRef.current = null;
     window.history.replaceState({}, '', window.location.pathname);
   };
 
@@ -312,5 +359,9 @@ function getHeroHeadline(eventType: LifeEventType, result: SimulationResult): st
       if (!anyMedicaidAfter && anyMedicaidBefore) return 'Your new income moves you out of Medicaid.';
       if (ptcBefore > 0 && ptcAfter === 0) return 'Your new income crosses the ACA subsidy threshold.';
       return 'Your new income shifts your coverage and eligibility.';
+    case 'ending_pregnancy':
+      if (anyMedicaidBefore && !anyMedicaidAfter) return 'Ending pregnancy ends your Medicaid pregnancy coverage.';
+      if (ptcAfter > 0) return 'After pregnancy, ACA marketplace coverage applies.';
+      return 'Coverage shifts once pregnancy ends.';
   }
 }

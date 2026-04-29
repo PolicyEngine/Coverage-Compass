@@ -1,16 +1,19 @@
 """Flask API for Healthcare Crossroads simulations."""
 
+import hashlib
+import json
 from dataclasses import dataclass
-from typing import Optional
+from typing import Any, Optional
 
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 
 from .aca_data import get_bronze_silver_ratio
-from .compare import compare, compare_multiple
+from .compare import compare, compare_multiple, run_baseline
 from .events import (
     ChildAgingOut,
     Divorce,
+    EndingPregnancy,
     LosingESI,
     Marriage,
     MedicareTransition,
@@ -109,6 +112,7 @@ def create_event_from_request(event_type: str, params: dict, household: Househol
     """Convert frontend event type to backend LifeEvent."""
     event_map = {
         "having_baby": lambda: Pregnancy(member_index=int(params.get("pregnantMemberIndex", 0))),
+        "ending_pregnancy": lambda: EndingPregnancy(member_index=int(params.get("pregnantMemberIndex", 0))),
         "moving_states": lambda: Move(new_state=params.get("newState", "TX"), new_zip_code=params.get("newZipCode") or None),
         "getting_married": lambda: Marriage(
             spouse_age=params.get("spouseAge", 30),
@@ -135,6 +139,50 @@ def create_event_from_request(event_type: str, params: dict, household: Househol
         raise ValueError(f"Unknown event type: {event_type}")
 
     return event_map[event_type]()
+
+
+def _household_hash(household_dict: dict) -> str:
+    """Stable canonical-JSON SHA256 hash of a household input dict.
+
+    Used as a cache key so the frontend can pre-warm the baseline during the
+    user's "thinking time" and have the server validate that the cached
+    baseline still corresponds to the current household at Apply time.
+    """
+    canonical = json.dumps(household_dict, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def _extract_state_code(situation: dict[str, Any]) -> str:
+    """Pull the state code out of a PolicyEngine situation dict."""
+    state = (
+        situation.get("households", {})
+        .get("household", {})
+        .get("state_code", {})
+    )
+    if isinstance(state, dict):
+        return next(iter(state.values()), "US")
+    return state or "US"
+
+
+def _aca_premium_side(
+    slcsp: float,
+    lcbp: float,
+    ptc: float,
+    net_premium: float,
+    state: str,
+) -> dict[str, Any]:
+    """Build one side (before or after) of the acaPremiums payload."""
+    use_real_bronze = lcbp > 0 and lcbp < slcsp
+    bronze_ratio = get_bronze_silver_ratio(state)
+    bronze = lcbp if use_real_bronze else slcsp * bronze_ratio
+    return {
+        "silverGross": slcsp,
+        "silverNet": net_premium,
+        "bronzeGross": bronze,
+        "bronzeNet": max(0.0, bronze - ptc),
+        "ptc": ptc,
+        "bronzeIsEstimate": not use_real_bronze,
+    }
 
 
 def format_result_for_frontend(result) -> dict:
@@ -204,47 +252,134 @@ def format_result_for_frontend(result) -> dict:
     net_change = result.changes.get("marketplace_net_premium")
     ptc_change = result.changes.get("premium_tax_credit")
     if slcsp_change and (slcsp_change.before > 0 or slcsp_change.after > 0):
-        # lcbp is accurate for 2026+; fall back to state-average ratio for earlier years
-        year = result.before_situation.get("households", {}).get("household", {}).get("state_code", {})
-        state = result.before_situation.get("households", {}).get("household", {}).get("state_code", {})
-        if isinstance(state, dict):
-            state = next(iter(state.values()), "US")
-
-        slcsp_b = slcsp_change.before
-        slcsp_a = slcsp_change.after
-        ptc_b = ptc_change.before if ptc_change else 0
-        ptc_a = ptc_change.after if ptc_change else 0
-        net_b = net_change.before if net_change else 0
-        net_a = net_change.after if net_change else 0
-
-        # Use real lcbp if available and plausible (bronze < silver), else state average
-        lcbp_b = lcbp_change.before if lcbp_change else 0
-        lcbp_a = lcbp_change.after if lcbp_change else 0
-        use_real_bronze_b = lcbp_b > 0 and lcbp_b < slcsp_b
-        use_real_bronze_a = lcbp_a > 0 and lcbp_a < slcsp_a
-
-        bronze_ratio = get_bronze_silver_ratio(state)
-        bronze_b = lcbp_b if use_real_bronze_b else slcsp_b * bronze_ratio
-        bronze_a = lcbp_a if use_real_bronze_a else slcsp_a * bronze_ratio
-
+        state = _extract_state_code(result.before_situation)
         response["acaPremiums"] = {
-            "before": {
-                "silverGross": slcsp_b,
-                "silverNet": net_b,
-                "bronzeGross": bronze_b,
-                "bronzeNet": max(0.0, bronze_b - ptc_b),
-                "ptc": ptc_b,
-                "bronzeIsEstimate": not use_real_bronze_b,
-            },
-            "after": {
-                "silverGross": slcsp_a,
-                "silverNet": net_a,
-                "bronzeGross": bronze_a,
-                "bronzeNet": max(0.0, bronze_a - ptc_a),
-                "ptc": ptc_a,
-                "bronzeIsEstimate": not use_real_bronze_a,
-            },
+            "before": _aca_premium_side(
+                slcsp=slcsp_change.before,
+                lcbp=lcbp_change.before if lcbp_change else 0,
+                ptc=ptc_change.before if ptc_change else 0,
+                net_premium=net_change.before if net_change else 0,
+                state=state,
+            ),
+            "after": _aca_premium_side(
+                slcsp=slcsp_change.after,
+                lcbp=lcbp_change.after if lcbp_change else 0,
+                ptc=ptc_change.after if ptc_change else 0,
+                net_premium=net_change.after if net_change else 0,
+                state=state,
+            ),
         }
+
+    return response
+
+
+def run_baseline_response(household_dict: dict) -> dict:
+    """Run the baseline simulation for a household and build the API payload.
+
+    Returns a dict with:
+      - healthcareBefore: HealthcareCoverage.to_dict() for the household
+      - metrics: per-variable before values (matches result.before.metrics)
+      - acaPremiums.before: when marketplace coverage is in play
+      - householdHash: stable SHA256 of the canonical household input
+    """
+    household = create_household_from_request(household_dict)
+    baseline = run_baseline(household)
+
+    # Build per-variable metrics in the same shape as result.before.metrics.
+    metrics = []
+    for var_name, before_val in baseline.results.items():
+        if var_name == "household_net_income":
+            continue
+        metrics.append({
+            "name": var_name,
+            "label": get_label(var_name),
+            "before": before_val,
+            "after": before_val,
+            "category": get_category(var_name),
+            "priority": get_priority(var_name),
+        })
+
+    response: dict[str, Any] = {
+        "householdHash": _household_hash(household_dict),
+        "metrics": metrics,
+        "netIncome": baseline.results.get("household_net_income", 0.0),
+    }
+
+    if baseline.healthcare:
+        response["healthcareBefore"] = baseline.healthcare.to_dict()
+
+    slcsp_b = baseline.results.get("slcsp", 0.0)
+    if slcsp_b > 0:
+        state = _extract_state_code(baseline.situation)
+        response["acaPremiums"] = {
+            "before": _aca_premium_side(
+                slcsp=slcsp_b,
+                lcbp=baseline.results.get("lcbp", 0.0),
+                ptc=baseline.results.get("premium_tax_credit", 0.0),
+                net_premium=baseline.results.get("marketplace_net_premium", 0.0),
+                state=state,
+            ),
+        }
+
+    return response
+
+
+def _apply_cached_before(response: dict, cached_before: dict) -> dict:
+    """Overlay cached baseline values onto a freshly-built simulate response.
+
+    The caller has already validated that the cache hash matches the current
+    household. We replace the before-side metrics, healthcareBefore, and
+    acaPremiums.before with the cached values, then recompute totals/diffs.
+
+    The point of caching is correctness *and* perf — the cached values come
+    from a baseline-only sim that should match what an after-cache sim would
+    have produced. We still recompute aggregates from the cached numbers so
+    the response is internally consistent.
+    """
+    cached_metrics = cached_before.get("metrics") or []
+    cached_by_name = {m["name"]: m for m in cached_metrics}
+
+    new_metrics = []
+    for m in response["before"]["metrics"]:
+        cached = cached_by_name.get(m["name"])
+        if cached is not None:
+            m = {**m, "before": cached["before"]}
+        new_metrics.append(m)
+    response["before"]["metrics"] = new_metrics
+
+    # Recompute before-side totals from the (possibly cached) metrics.
+    total_tax_before = sum(
+        m["before"] for m in new_metrics if m["category"] == "tax"
+    )
+    total_benefits_before = sum(
+        m["before"] for m in new_metrics if m["category"] in ("benefit", "credit")
+    )
+    response["before"]["totalTax"] = total_tax_before
+    response["before"]["totalBenefits"] = total_benefits_before
+
+    # Mirror metrics into the after-side baseline column.
+    response["after"]["metrics"] = [
+        {**m, "before": m["after"]} for m in new_metrics
+    ]
+
+    if "netIncome" in cached_before:
+        response["before"]["netIncome"] = cached_before["netIncome"]
+        response["diff"]["netIncome"] = (
+            response["after"]["netIncome"] - cached_before["netIncome"]
+        )
+
+    # Recompute diffs against the cached before.
+    response["diff"]["totalTax"] = response["after"]["totalTax"] - total_tax_before
+    response["diff"]["totalBenefits"] = (
+        response["after"]["totalBenefits"] - total_benefits_before
+    )
+
+    if "healthcareBefore" in cached_before:
+        response["healthcareBefore"] = cached_before["healthcareBefore"]
+
+    aca_cached = (cached_before.get("acaPremiums") or {}).get("before")
+    if aca_cached and "acaPremiums" in response:
+        response["acaPremiums"]["before"] = aca_cached
 
     return response
 
@@ -254,7 +389,16 @@ def simulate():
     """Run a life event simulation (single or multiple events)."""
     try:
         data = request.get_json()
-        household = create_household_from_request(data.get("household", {}))
+        household_dict = data.get("household", {})
+        household = create_household_from_request(household_dict)
+
+        # Optional: client-side baseline cache pre-warmed during wizard "thinking time".
+        # Only used if its hash matches the canonical hash of the current household.
+        cached_before = data.get("cachedBefore")
+        cache_is_valid = (
+            isinstance(cached_before, dict)
+            and cached_before.get("householdHash") == _household_hash(household_dict)
+        )
 
         # Support both single event and multiple events
         life_events = data.get("lifeEvents", [])
@@ -285,11 +429,33 @@ def simulate():
         else:
             raise ValueError("No life event provided")
 
-        return jsonify(format_result_for_frontend(result))
+        response = format_result_for_frontend(result)
+        if cache_is_valid:
+            response = _apply_cached_before(response, cached_before)
+        return jsonify(response)
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
     except Exception as e:
         return jsonify({"error": f"Simulation failed: {str(e)}"}), 500
+
+
+@app.route("/api/baseline", methods=["POST"])
+def baseline():
+    """Run only the baseline (no-event) simulation for a household.
+
+    Returns the before-side healthcare coverage, per-variable metrics, optional
+    ACA premium breakdown, and a stable household hash so the frontend can
+    pre-warm this during the wizard and pass it back into /api/simulate at
+    Apply time.
+    """
+    try:
+        data = request.get_json()
+        household_dict = data.get("household", {})
+        return jsonify(run_baseline_response(household_dict))
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    except Exception as e:
+        return jsonify({"error": f"Baseline simulation failed: {str(e)}"}), 500
 
 
 @app.route("/api/health", methods=["GET"])
