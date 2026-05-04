@@ -60,11 +60,17 @@ interface ChipProps {
   before: string;
   after?: string; // if set, show diff
   isOpen: boolean;
+  someChipActive: boolean; // some other chip already has a diff
   onClick: () => void;
 }
 
-function Chip({ label, before, after, isOpen, onClick }: ChipProps) {
+function Chip({ label, before, after, isOpen, someChipActive, onClick }: ChipProps) {
   const hasDiff = after !== undefined && after !== before;
+  // "what if?" microcopy is hidden once this chip has been edited or is open.
+  // When another chip is the active one, this chip's microcopy fades back so
+  // the active chip visually stands out.
+  const showHint = !hasDiff && !isOpen;
+  const hintTone = someChipActive ? 'opacity-30' : 'opacity-70';
   return (
     <button
       type="button"
@@ -78,18 +84,14 @@ function Chip({ label, before, after, isOpen, onClick }: ChipProps) {
           : 'border-dashed border-[#319795]/40 hover:border-solid hover:border-[#319795] hover:bg-[#E6FFFA]/50',
       ].join(' ')}
     >
-      {/* Pencil icon — visible on hover/active */}
-      <svg
-        className={`absolute top-1.5 right-1.5 w-3 h-3 transition-opacity ${
-          isOpen || hasDiff ? 'opacity-70 text-[#319795]' : 'opacity-30 text-[#319795] group-hover:opacity-90'
-        }`}
-        fill="none"
-        stroke="currentColor"
-        viewBox="0 0 24 24"
-      >
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-      </svg>
-      <div className="text-[10px] font-semibold uppercase tracking-widest text-gray-500 mb-0.5 pr-4">
+      {showHint && (
+        <span
+          className={`absolute top-1.5 right-2 text-[9px] italic text-[#319795] transition-opacity ${hintTone} group-hover:opacity-100`}
+        >
+          what if?
+        </span>
+      )}
+      <div className="text-[10px] font-semibold uppercase tracking-widest text-gray-500 mb-0.5 pr-12">
         {label}
       </div>
       {hasDiff ? (
@@ -249,7 +251,7 @@ export default function InputStrip({
 
           {/* LOCATION */}
           <div className="relative">
-            <Chip label="Location" before={locationBefore} after={locationAfter} isOpen={openChip === 'location'} onClick={() => open('location')} />
+            <Chip label="Location" before={locationBefore} after={locationAfter} someChipActive={selectedEvent !== null} isOpen={openChip ==='location'} onClick={() => open('location')} />
             {openChip === 'location' && (
               <Popover onClose={close}>
                 <LocationDiffPopover
@@ -268,7 +270,7 @@ export default function InputStrip({
 
           {/* FILING */}
           <div className="relative">
-            <Chip label="Filing" before={filingBefore} after={filingAfter} isOpen={openChip === 'filing'} onClick={() => open('filing')} />
+            <Chip label="Filing" before={filingBefore} after={filingAfter} someChipActive={selectedEvent !== null} isOpen={openChip ==='filing'} onClick={() => open('filing')} />
             {openChip === 'filing' && (
               <Popover onClose={close}>
                 <FilingDiffPopover
@@ -287,7 +289,7 @@ export default function InputStrip({
 
           {/* INCOME */}
           <div className="relative">
-            <Chip label="Income" before={incomeBefore} after={incomeAfter} isOpen={openChip === 'income'} onClick={() => open('income')} />
+            <Chip label="Income" before={incomeBefore} after={incomeAfter} someChipActive={selectedEvent !== null} isOpen={openChip ==='income'} onClick={() => open('income')} />
             {openChip === 'income' && (
               <Popover onClose={close}>
                 <IncomeDiffPopover
@@ -306,7 +308,7 @@ export default function InputStrip({
 
           {/* ESI */}
           <div className="relative">
-            <Chip label="ESI" before={esiBefore} after={esiAfter} isOpen={openChip === 'esi'} onClick={() => open('esi')} />
+            <Chip label="ESI" before={esiBefore} after={esiAfter} someChipActive={selectedEvent !== null} isOpen={openChip ==='esi'} onClick={() => open('esi')} />
             {openChip === 'esi' && (
               <Popover onClose={close}>
                 <EsiDiffPopover
@@ -325,7 +327,7 @@ export default function InputStrip({
 
           {/* CHILDREN */}
           <div className="relative">
-            <Chip label="Children" before={childrenBefore} after={childrenAfter} isOpen={openChip === 'children'} onClick={() => open('children')} />
+            <Chip label="Children" before={childrenBefore} after={childrenAfter} someChipActive={selectedEvent !== null} isOpen={openChip ==='children'} onClick={() => open('children')} />
             {openChip === 'children' && (
               <Popover onClose={close}>
                 <ChildrenDiffPopover
