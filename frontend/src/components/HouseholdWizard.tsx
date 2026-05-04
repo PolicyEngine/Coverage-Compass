@@ -24,6 +24,7 @@ export default function HouseholdWizard({ onComplete, onBack, onPartialChange }:
   const [detectedState, setDetectedState] = useState<string | null>(null);
 
   const [filingStatus, setFilingStatus] = useState<FilingStatus>('single');
+  const [filingTouched, setFilingTouched] = useState(false);
 
   const [age, setAge] = useState<string>('');
   const [partnerAge, setPartnerAge] = useState<string>('');
@@ -33,9 +34,11 @@ export default function HouseholdWizard({ onComplete, onBack, onPartialChange }:
 
   const [hasESI, setHasESI] = useState<boolean>(false);
   const [spouseHasESI, setSpouseHasESI] = useState<boolean>(false);
+  const [esiTouched, setEsiTouched] = useState(false);
 
   const [childAges, setChildAges] = useState<Array<number | ''>>([]);
   const [pregnantMember, setPregnantMember] = useState<'head' | 'spouse' | null>(null);
+  const [pregnancyTouched, setPregnancyTouched] = useState(false);
 
   const married = isMarriedStatus(filingStatus);
 
@@ -82,6 +85,7 @@ export default function HouseholdWizard({ onComplete, onBack, onPartialChange }:
 
   function selectFilingStatus(status: FilingStatus) {
     setFilingStatus(status);
+    setFilingTouched(true);
     setStep(3);
     onPartialChange?.({ filingStatus: status, state: detectedState ?? undefined, zipCode: zip || undefined, year: 2026 });
   }
@@ -89,6 +93,7 @@ export default function HouseholdWizard({ onComplete, onBack, onPartialChange }:
   function selectESI(selfESI: boolean, partnerESI: boolean) {
     setHasESI(selfESI);
     setSpouseHasESI(partnerESI);
+    setEsiTouched(true);
     setStep(6);
     onPartialChange?.({
       state: detectedState ?? undefined, zipCode: zip || undefined,
@@ -128,18 +133,28 @@ export default function HouseholdWizard({ onComplete, onBack, onPartialChange }:
     const myPartnerAge = married ? (parseInt(partnerAge, 10) || myAge) : myAge;
     const income = (parseFloat(monthlyIncome) || 0) * 12;
     const spouseIncome = married ? (parseFloat(partnerMonthlyIncome) || 0) * 12 : 0;
+    const numericChildAges = childAges.map((a) => (a === '' ? 0 : a));
+
+    // Auto-derive filing status: a single filer with at least one dependent
+    // qualifies for head-of-household, which has more favorable brackets.
+    // We don't surface MFS in the wizard because it's almost always worse
+    // than MFJ for our calculator's purposes.
+    const resolvedFilingStatus: FilingStatus =
+      filingStatus === 'single' && numericChildAges.length > 0
+        ? 'head_of_household'
+        : filingStatus;
 
     const household: Household = {
       state: detectedState ?? 'CA',
       zipCode: zip,
-      filingStatus,
+      filingStatus: resolvedFilingStatus,
       age: myAge,
       spouseAge: myPartnerAge,
       income,
       spouseIncome,
       hasESI,
       spouseHasESI,
-      childAges: childAges.map((a) => (a === '' ? 0 : a)),
+      childAges: numericChildAges,
       year: 2026,
       pregnantMember: pregnantMember ?? null,
     };
@@ -152,8 +167,6 @@ export default function HouseholdWizard({ onComplete, onBack, onPartialChange }:
   const step1Valid = zip.length === 5 && detectedState !== null;
   const step3Valid = age !== '' && parseInt(age, 10) >= 18 && (!married || (partnerAge !== '' && parseInt(partnerAge, 10) >= 18));
   const step4Valid = monthlyIncome !== '' && (!married || partnerMonthlyIncome !== '');
-  const isHOH = filingStatus === 'head_of_household';
-  const step6Valid = !isHOH || childAges.length > 0;
 
   return (
     <div className="max-w-lg mx-auto">
@@ -212,15 +225,13 @@ export default function HouseholdWizard({ onComplete, onBack, onPartialChange }:
 
         {step === 2 && (
           <div>
-            <h2 className="text-2xl font-bold text-gray-900 mb-2">What&apos;s your filing status?</h2>
+            <h2 className="text-2xl font-bold text-gray-900 mb-2">Are you single or married?</h2>
             <p className="text-sm text-gray-500 mb-6" />
             <div className="flex flex-col gap-0">
               {(
                 [
                   { label: 'Single', value: 'single' },
-                  { label: 'Married, filing jointly', value: 'married_jointly' },
-                  { label: 'Head of household', value: 'head_of_household' },
-                  { label: 'Married, filing separately', value: 'married_separately' },
+                  { label: 'Married', value: 'married_jointly' },
                 ] as { label: string; value: FilingStatus }[]
               ).map((opt) => (
                 <button
@@ -228,7 +239,7 @@ export default function HouseholdWizard({ onComplete, onBack, onPartialChange }:
                   type="button"
                   onClick={() => selectFilingStatus(opt.value)}
                   className={`w-full text-left px-4 py-3 rounded-xl border-2 font-medium transition-all mb-2 ${
-                    filingStatus === opt.value
+                    filingTouched && filingStatus === opt.value
                       ? 'border-[#319795] bg-[#E6FFFA] text-[#285E61]'
                       : 'border-gray-200 text-gray-900 hover:border-[#319795] hover:bg-[#E6FFFA]'
                   }`}
@@ -379,7 +390,7 @@ export default function HouseholdWizard({ onComplete, onBack, onPartialChange }:
                   type="button"
                   onClick={() => selectESI(true, false)}
                   className={`w-full text-left px-4 py-3 rounded-xl border-2 font-medium transition-all mb-2 ${
-                    hasESI
+                    esiTouched && hasESI
                       ? 'border-[#319795] bg-[#E6FFFA] text-[#285E61]'
                       : 'border-gray-200 text-gray-900 hover:border-[#319795] hover:bg-[#E6FFFA]'
                   }`}
@@ -390,7 +401,7 @@ export default function HouseholdWizard({ onComplete, onBack, onPartialChange }:
                   type="button"
                   onClick={() => selectESI(false, false)}
                   className={`w-full text-left px-4 py-3 rounded-xl border-2 font-medium transition-all mb-2 ${
-                    !hasESI
+                    esiTouched && !hasESI
                       ? 'border-[#319795] bg-[#E6FFFA] text-[#285E61]'
                       : 'border-gray-200 text-gray-900 hover:border-[#319795] hover:bg-[#E6FFFA]'
                   }`}
@@ -413,7 +424,7 @@ export default function HouseholdWizard({ onComplete, onBack, onPartialChange }:
                     type="button"
                     onClick={() => selectESI(opt.self, opt.partner)}
                     className={`w-full text-left px-4 py-3 rounded-xl border-2 font-medium transition-all mb-2 ${
-                      hasESI === opt.self && spouseHasESI === opt.partner
+                      esiTouched && hasESI === opt.self && spouseHasESI === opt.partner
                         ? 'border-[#319795] bg-[#E6FFFA] text-[#285E61]'
                         : 'border-gray-200 text-gray-900 hover:border-[#319795] hover:bg-[#E6FFFA]'
                     }`}
@@ -436,13 +447,8 @@ export default function HouseholdWizard({ onComplete, onBack, onPartialChange }:
         )}
 
         {step === 6 && (
-          <form onSubmit={(e) => { e.preventDefault(); if (step6Valid) goNext(); }}>
+          <form onSubmit={(e) => { e.preventDefault(); goNext(); }}>
             <h2 className="text-2xl font-bold text-gray-900 mb-2">Do you have any children under 18?</h2>
-            {isHOH && (
-              <p className="text-sm text-[#92400E] bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-4">
-                Head of household requires at least one dependent. Add a child below, or go back and pick a different filing status.
-              </p>
-            )}
             <p className="text-sm text-gray-500 mb-6" />
             <div className="flex flex-col gap-3">
               {childAges.length === 0 && (
@@ -501,7 +507,6 @@ export default function HouseholdWizard({ onComplete, onBack, onPartialChange }:
               </button>
               <button
                 type="submit"
-                disabled={!step6Valid}
                 className="btn btn-primary"
               >
                 Continue
@@ -527,9 +532,9 @@ export default function HouseholdWizard({ onComplete, onBack, onPartialChange }:
                     <button
                       key={opt.label}
                       type="button"
-                      onClick={() => { setPregnantMember(opt.value); }}
+                      onClick={() => { setPregnantMember(opt.value); setPregnancyTouched(true); }}
                       className={`w-full text-left px-4 py-3 rounded-xl border-2 font-medium transition-all mb-2 ${
-                        pregnantMember === opt.value
+                        pregnancyTouched && pregnantMember === opt.value
                           ? 'border-[#319795] bg-[#E6FFFA] text-[#285E61]'
                           : 'border-gray-200 text-gray-900 hover:border-[#319795] hover:bg-[#E6FFFA]'
                       }`}
@@ -549,9 +554,9 @@ export default function HouseholdWizard({ onComplete, onBack, onPartialChange }:
                     <button
                       key={opt.label}
                       type="button"
-                      onClick={() => { setPregnantMember(opt.value); }}
+                      onClick={() => { setPregnantMember(opt.value); setPregnancyTouched(true); }}
                       className={`w-full text-left px-4 py-3 rounded-xl border-2 font-medium transition-all mb-2 ${
-                        pregnantMember === opt.value
+                        pregnancyTouched && pregnantMember === opt.value
                           ? 'border-[#319795] bg-[#E6FFFA] text-[#285E61]'
                           : 'border-gray-200 text-gray-900 hover:border-[#319795] hover:bg-[#E6FFFA]'
                       }`}
