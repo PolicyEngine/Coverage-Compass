@@ -89,7 +89,7 @@ class TestCompareMove:
         """Move should change the state in the situation."""
         result = compare(single_adult_household, Move(new_state="TX"))
         after_state = result.after_situation["households"]["household"]["state_code"]
-        assert after_state[2024] == "TX"
+        assert after_state[2026] == "TX"
 
 
 class TestCompareMarriage:

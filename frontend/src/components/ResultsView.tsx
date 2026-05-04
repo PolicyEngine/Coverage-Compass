@@ -8,7 +8,8 @@ type Tier = 'bronze' | 'silver';
 interface ResultsViewProps {
   result: SimulationResult;
   eventType?: LifeEventType;
-  onReset: () => void;
+  onTryAnother: () => void; // keep household, clear event so user can model another what-if
+  onReset: () => void;       // full reset back to the wizard
 }
 
 // Per-month financial rows we surface in the statement table.
@@ -276,7 +277,7 @@ function PlanCard({
   );
 }
 
-export default function ResultsView({ result, eventType, onReset }: ResultsViewProps) {
+export default function ResultsView({ result, eventType, onTryAnother, onReset }: ResultsViewProps) {
   if (!result?.before || !result?.after) {
     return (
       <div className="card p-8 text-center">
@@ -287,7 +288,7 @@ export default function ResultsView({ result, eventType, onReset }: ResultsViewP
         </div>
         <h3 className="text-lg font-semibold text-gray-900 mb-2">Something went wrong</h3>
         <p className="text-gray-500 mb-4">The simulation returned incomplete data. Please try again.</p>
-        <button onClick={onReset} className="btn btn-primary">Try again</button>
+        <button onClick={onTryAnother} className="btn btn-primary">Try again</button>
       </div>
     );
   }
@@ -491,12 +492,15 @@ export default function ResultsView({ result, eventType, onReset }: ResultsViewP
         </div>
       )}
 
-      <div className="flex justify-center pt-2">
-        <button onClick={onReset} className="btn btn-secondary">
+      <div className="flex justify-center gap-3 flex-wrap pt-2">
+        <button onClick={onTryAnother} className="btn btn-secondary">
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
           </svg>
           Try another scenario
+        </button>
+        <button onClick={onReset} className="btn btn-ghost">
+          Start over with a new household
         </button>
       </div>
     </div>

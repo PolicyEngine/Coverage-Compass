@@ -112,8 +112,8 @@ class TestHousehold:
 
         # Check household details
         hh = situation["households"]["household"]
-        assert hh["state_code"] == {2024: "CA"}
-        assert hh["county"] == {2024: "Los Angeles County"}
+        assert hh["state_code"] == {2026: "CA"}
+        assert hh["county"] == {2026: "Los Angeles County"}
 
     def test_household_copy(self):
         """Household.copy() creates a deep copy."""

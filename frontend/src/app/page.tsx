@@ -192,6 +192,17 @@ export default function Home() {
     setTimeout(() => setShowCopied(false), 2000);
   };
 
+  const handleTryAnother = () => {
+    // Keep household, scenarios history, and pre-warmed baseline.
+    // Clear the active event/result so the user can model a new what-if.
+    setSelectedEvent(null);
+    setEventParams({});
+    setCurrentScenarioId(null);
+    setError(null);
+    setShareUrl(null);
+    window.history.replaceState({}, '', window.location.pathname);
+  };
+
   const handleReset = () => {
     setHousehold(null);
     setSelectedEvent(null);
@@ -345,7 +356,7 @@ export default function Home() {
         {/* Results */}
         {!isLoading && !error && result && selectedEvent && (
           <div className="mt-4">
-            <ResultsView result={result} eventType={selectedEvent} onReset={handleReset} />
+            <ResultsView result={result} eventType={selectedEvent} onTryAnother={handleTryAnother} onReset={handleReset} />
           </div>
         )}
 

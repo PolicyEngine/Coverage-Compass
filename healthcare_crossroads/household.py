@@ -48,7 +48,7 @@ class Household:
 
     state: str
     members: list[Person] = field(default_factory=list)
-    year: int = 2024
+    year: int = 2026
     county: str | None = None  # County name for ACA SLCSP lookups
     zip_code: str | None = None  # ZIP code for more precise geographic targeting
 
@@ -75,7 +75,7 @@ class Household:
             data: Dictionary with keys:
                 - state: Two-letter state code
                 - members: List of person dictionaries
-                - year: Optional tax year (default 2024)
+                - year: Optional tax year (default 2026)
 
         Returns:
             A new Household instance
@@ -86,7 +86,7 @@ class Household:
         return cls(
             state=data["state"],
             members=members,
-            year=data.get("year", 2024),
+            year=data.get("year", 2026),
             county=data.get("county"),
             zip_code=data.get("zip_code"),
         )

@@ -103,7 +103,7 @@ def create_household_from_request(data: dict) -> Household:
     return Household(
         state=data.get("state", "CA"),
         members=members,
-        year=data.get("year", 2024),
+        year=data.get("year", 2026),
         zip_code=data.get("zipCode") or None,
     )
 
