@@ -164,6 +164,70 @@ function MetricRow({
   );
 }
 
+function MobilePersonCard({
+  label,
+  beforeCoverage,
+  afterCoverage,
+  existsBefore,
+  existsAfter,
+}: {
+  label: string;
+  beforeCoverage: string | null;
+  afterCoverage: string | null;
+  existsBefore: boolean;
+  existsAfter: boolean;
+}) {
+  return (
+    <div className="border border-gray-100 rounded-lg p-3 bg-gray-50/40">
+      <div className="text-sm font-medium text-gray-900 mb-2">{label}</div>
+      <div className="grid grid-cols-2 gap-3 text-xs">
+        <div>
+          <div className="text-[10px] text-gray-400 uppercase tracking-wider mb-1">Before</div>
+          <CoveragePill type={beforeCoverage} exists={existsBefore} />
+        </div>
+        <div>
+          <div className="text-[10px] text-gray-400 uppercase tracking-wider mb-1">After</div>
+          <CoveragePill type={afterCoverage} exists={existsAfter} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function MobileMetricCard({ metric }: { metric: BenefitMetric }) {
+  const category = METRIC_CATEGORY[metric.name] ?? metric.category.replace('_', ' ');
+  const chipKind = METRIC_CHIP_KIND[metric.name] ?? 'cost';
+  const monthlyBefore = metric.before / 12;
+  const monthlyAfter = metric.after / 12;
+  const monthlyDelta = monthlyAfter - monthlyBefore;
+
+  return (
+    <div className="border border-gray-100 rounded-lg p-3 bg-gray-50/40">
+      <div className="flex items-baseline justify-between gap-2 mb-2 flex-wrap">
+        <div>
+          <div className="text-sm font-medium text-gray-900">{metric.label}</div>
+          <div className="text-[11px] text-gray-400">{category}</div>
+        </div>
+        <DiffChip kind={chipKind} monthlyDelta={monthlyDelta} />
+      </div>
+      <div className="grid grid-cols-2 gap-3 text-xs">
+        <div>
+          <div className="text-[10px] text-gray-400 uppercase tracking-wider mb-1">Before</div>
+          <div className="text-sm tabular-nums text-gray-700">
+            {monthlyBefore === 0 ? <span className="text-gray-300">—</span> : `${formatCurrency(monthlyBefore)}/mo`}
+          </div>
+        </div>
+        <div>
+          <div className="text-[10px] text-gray-400 uppercase tracking-wider mb-1">After</div>
+          <div className="text-sm tabular-nums text-gray-700">
+            {monthlyAfter === 0 ? <span className="text-gray-300">—</span> : `${formatCurrency(monthlyAfter)}/mo`}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function PlanCard({
   tier,
   gross,
@@ -287,18 +351,18 @@ export default function ResultsView({ result, eventType, onReset }: ResultsViewP
     <div className="space-y-4">
       {/* Hero net-change card */}
       {hasHero && (
-        <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm">
-          <div className="flex items-baseline gap-6 flex-wrap">
+        <div className="bg-white border border-gray-200 rounded-xl p-5 sm:p-6 shadow-sm">
+          <div className="flex items-baseline gap-3 sm:gap-6 flex-col sm:flex-row sm:flex-wrap">
             <div>
               <div className="text-[10px] font-semibold uppercase tracking-widest text-gray-400 mb-1">
                 Net change
               </div>
-              <div className={`text-4xl font-bold tabular-nums ${heroTone}`}>
+              <div className={`text-3xl sm:text-4xl font-bold tabular-nums ${heroTone}`}>
                 {heroSign}{heroAmount}
-                <span className="text-base font-medium ml-1">/mo</span>
+                <span className="text-sm sm:text-base font-medium ml-1">/mo</span>
               </div>
             </div>
-            <p className="text-sm text-gray-500 leading-relaxed flex-1 min-w-[260px] max-w-prose">
+            <p className="text-sm text-gray-500 leading-relaxed flex-1 sm:min-w-[260px] max-w-prose">
               After this event, your household&apos;s monthly out-of-pocket changes from{' '}
               <b className="text-gray-700 tabular-nums">{formatCurrency(netBefore)}</b> to{' '}
               <b className="text-gray-700 tabular-nums">{formatCurrency(netAfter)}</b>, after applying any tax credits.
@@ -307,8 +371,8 @@ export default function ResultsView({ result, eventType, onReset }: ResultsViewP
         </div>
       )}
 
-      {/* Unified statement table */}
-      <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+      {/* Unified statement — desktop table */}
+      <div className="hidden sm:block bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
         <table className="w-full border-collapse">
           <colgroup>
             <col className="w-[28%]" />
@@ -355,6 +419,44 @@ export default function ResultsView({ result, eventType, onReset }: ResultsViewP
             )}
           </tbody>
         </table>
+      </div>
+
+      {/* Unified statement — mobile stacked cards */}
+      <div className="sm:hidden bg-white border border-gray-200 rounded-xl shadow-sm p-4 space-y-4">
+        <div>
+          <div className="text-[10px] font-semibold uppercase tracking-widest text-gray-400 mb-2">
+            Who is covered
+          </div>
+          <div className="space-y-2">
+            {allLabels.map((label) => {
+              const beforeCoverage = result.healthcareBefore?.people.find((p) => p.label === label)?.coverage ?? null;
+              const afterCoverage = result.healthcareAfter?.people.find((p) => p.label === label)?.coverage ?? null;
+              return (
+                <MobilePersonCard
+                  key={label}
+                  label={label}
+                  beforeCoverage={beforeCoverage}
+                  afterCoverage={afterCoverage}
+                  existsBefore={beforeLabels.has(label)}
+                  existsAfter={afterLabels.has(label)}
+                />
+              );
+            })}
+          </div>
+        </div>
+
+        {financialMetrics.length > 0 && (
+          <div>
+            <div className="text-[10px] font-semibold uppercase tracking-widest text-gray-400 mb-2">
+              Per-month financial impact
+            </div>
+            <div className="space-y-2">
+              {financialMetrics.map((m) => (
+                <MobileMetricCard key={m.name} metric={m} />
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* ACA marketplace plans sub-card */}

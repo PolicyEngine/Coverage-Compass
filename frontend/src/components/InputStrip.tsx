@@ -115,8 +115,17 @@ interface PopoverProps {
 function Popover({ onClose, children }: PopoverProps) {
   return (
     <>
-      <div className="fixed inset-0 z-40" onClick={onClose} />
-      <div className="absolute top-[calc(100%+8px)] left-0 z-50 min-w-[260px] max-w-[340px]">
+      {/* Backdrop */}
+      <div className="fixed inset-0 z-40 bg-black/30 sm:bg-transparent" onClick={onClose} />
+
+      {/* Mobile: bottom sheet */}
+      <div className="sm:hidden fixed left-0 right-0 bottom-0 z-50 bg-white rounded-t-2xl shadow-2xl p-5 pb-7 max-h-[85vh] overflow-y-auto animate-slideUp">
+        <div className="w-10 h-1 bg-gray-200 rounded-full mx-auto mb-4" />
+        {children}
+      </div>
+
+      {/* Desktop: anchored popover */}
+      <div className="hidden sm:block absolute top-[calc(100%+8px)] left-0 z-50 min-w-[260px] max-w-[340px]">
         <div className="relative bg-white border border-gray-200 rounded-xl shadow-xl p-4">
           <div className="absolute -top-1.5 left-4 w-3 h-3 bg-white border-l border-t border-gray-200 rotate-45" />
           {children}
@@ -247,7 +256,7 @@ export default function InputStrip({
   return (
     <div className="relative w-full bg-white border border-gray-200 rounded-xl shadow-sm overflow-visible">
       <div className="flex items-center gap-1 px-2 pt-1.5 pb-1.5">
-        <div className="input-strip-grid grid grid-cols-2 sm:grid-cols-5 gap-1.5 sm:gap-1.5 flex-1 min-w-0">
+        <div className="input-strip-grid grid grid-cols-1 sm:grid-cols-5 gap-1.5 flex-1 min-w-0">
 
           {/* LOCATION */}
           <div className="relative">

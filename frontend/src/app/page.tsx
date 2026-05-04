@@ -209,7 +209,7 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-[#F1F5F9]">
-      <div className="max-w-[1100px] mx-auto px-6 pb-16">
+      <div className="max-w-[1100px] mx-auto px-4 sm:px-6 pb-16">
 
         {/* Hero card */}
         <div className="bg-white border border-gray-200 rounded-xl p-7 shadow-sm mb-4 mt-6">
