@@ -12,19 +12,18 @@ interface ResultsViewProps {
 }
 
 // Per-month financial rows we surface in the statement table.
+// CHIP and Medicaid program-cost dollar amounts are intentionally omitted —
+// they're shown via per-person coverage pills above; the dollar value to
+// the family (premium contribution) isn't directly modeled.
 const FINANCIAL_METRIC_NAMES = new Set([
   'premium_tax_credit',
   'marketplace_net_premium',
-  'medicaid',
-  'chip',
 ]);
 
 // Each metric's category tag, for the small label shown next to the row name.
 const METRIC_CATEGORY: Record<string, string> = {
   premium_tax_credit: 'tax credit',
   marketplace_net_premium: 'premium',
-  medicaid: 'benefit',
-  chip: 'benefit',
 };
 
 // Each metric's diff-chip kind (drives the chip color + suffix word).
@@ -32,8 +31,6 @@ type ChipKind = 'credit' | 'cost' | 'benefit';
 const METRIC_CHIP_KIND: Record<string, ChipKind> = {
   premium_tax_credit: 'credit',
   marketplace_net_premium: 'cost',
-  medicaid: 'benefit',
-  chip: 'benefit',
 };
 
 function formatCurrency(value: number): string {
