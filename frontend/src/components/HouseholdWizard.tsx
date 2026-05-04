@@ -169,7 +169,7 @@ export default function HouseholdWizard({ onComplete, onBack, onPartialChange }:
 
       <div className="card p-8 animate-fadeIn" key={step}>
         {step === 1 && (
-          <div>
+          <form onSubmit={(e) => { e.preventDefault(); if (step1Valid) goNext(); }}>
             <h2 className="text-2xl font-bold text-gray-900 mb-2">What&apos;s your ZIP code?</h2>
             <p className="text-sm text-gray-500 mb-6">We use this to find ACA premiums in your area.</p>
             <div className="flex flex-col items-center gap-3">
@@ -198,15 +198,14 @@ export default function HouseholdWizard({ onComplete, onBack, onPartialChange }:
                 Back
               </button>
               <button
-                type="button"
-                onClick={goNext}
+                type="submit"
                 disabled={!step1Valid}
                 className="btn btn-primary"
               >
                 Continue
               </button>
             </div>
-          </div>
+          </form>
         )}
 
         {step === 2 && (
@@ -249,7 +248,7 @@ export default function HouseholdWizard({ onComplete, onBack, onPartialChange }:
         )}
 
         {step === 3 && (
-          <div>
+          <form onSubmit={(e) => { e.preventDefault(); if (step3Valid) goNext(); }}>
             <h2 className="text-2xl font-bold text-gray-900 mb-2">How old are you?</h2>
             <p className="text-sm text-gray-500 mb-6" />
             <div className="flex flex-col gap-4">
@@ -302,19 +301,18 @@ export default function HouseholdWizard({ onComplete, onBack, onPartialChange }:
                 Back
               </button>
               <button
-                type="button"
-                onClick={goNext}
+                type="submit"
                 disabled={!step3Valid}
                 className="btn btn-primary"
               >
                 Continue
               </button>
             </div>
-          </div>
+          </form>
         )}
 
         {step === 4 && (
-          <div>
+          <form onSubmit={(e) => { e.preventDefault(); if (step4Valid) goNext(); }}>
             <h2 className="text-2xl font-bold text-gray-900 mb-2">What&apos;s your monthly income?</h2>
             <p className="text-sm text-gray-500 mb-6">Before taxes. Include wages, self-employment, etc.</p>
             <div className="flex flex-col gap-4">
@@ -359,15 +357,14 @@ export default function HouseholdWizard({ onComplete, onBack, onPartialChange }:
                 Back
               </button>
               <button
-                type="button"
-                onClick={goNext}
+                type="submit"
                 disabled={!step4Valid}
                 className="btn btn-primary"
               >
                 Continue
               </button>
             </div>
-          </div>
+          </form>
         )}
 
         {step === 5 && (
@@ -437,7 +434,7 @@ export default function HouseholdWizard({ onComplete, onBack, onPartialChange }:
         )}
 
         {step === 6 && (
-          <div>
+          <form onSubmit={(e) => { e.preventDefault(); goNext(); }}>
             <h2 className="text-2xl font-bold text-gray-900 mb-2">Do you have any children under 18?</h2>
             <p className="text-sm text-gray-500 mb-6" />
             <div className="flex flex-col gap-3">
@@ -496,14 +493,13 @@ export default function HouseholdWizard({ onComplete, onBack, onPartialChange }:
                 Back
               </button>
               <button
-                type="button"
-                onClick={goNext}
+                type="submit"
                 className="btn btn-primary"
               >
                 Continue
               </button>
             </div>
-          </div>
+          </form>
         )}
 
         {step === 7 && (
