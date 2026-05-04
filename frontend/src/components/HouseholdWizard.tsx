@@ -37,6 +37,7 @@ export default function HouseholdWizard({ onComplete, onBack, onPartialChange }:
   const [esiTouched, setEsiTouched] = useState(false);
 
   const [childAges, setChildAges] = useState<Array<number | ''>>([]);
+  const [hasKids, setHasKids] = useState<'yes' | 'no' | null>(null);
   const [pregnantMember, setPregnantMember] = useState<'head' | 'spouse' | null>(null);
   const [pregnancyTouched, setPregnancyTouched] = useState(false);
 
@@ -446,14 +447,47 @@ export default function HouseholdWizard({ onComplete, onBack, onPartialChange }:
           </div>
         )}
 
-        {step === 6 && (
-          <form onSubmit={(e) => { e.preventDefault(); goNext(); }}>
+        {step === 6 && hasKids !== 'yes' && (
+          <div>
             <h2 className="text-2xl font-bold text-gray-900 mb-2">Do you have any children under 18?</h2>
             <p className="text-sm text-gray-500 mb-6" />
+            <div className="flex flex-col gap-0">
+              <button
+                type="button"
+                onClick={() => { setHasKids('yes'); if (childAges.length === 0) addChild(); }}
+                className="w-full text-left px-4 py-3 rounded-xl border-2 border-gray-200 text-gray-900 font-medium transition-all mb-2 hover:border-[#319795] hover:bg-[#E6FFFA]"
+              >
+                Yes
+              </button>
+              <button
+                type="button"
+                onClick={() => { setHasKids('no'); setChildAges([]); setStep(7); }}
+                className={`w-full text-left px-4 py-3 rounded-xl border-2 font-medium transition-all mb-2 ${
+                  hasKids === 'no'
+                    ? 'border-[#319795] bg-[#E6FFFA] text-[#285E61]'
+                    : 'border-gray-200 text-gray-900 hover:border-[#319795] hover:bg-[#E6FFFA]'
+                }`}
+              >
+                No
+              </button>
+            </div>
+            <div className="flex justify-between mt-4">
+              <button
+                type="button"
+                onClick={goBack}
+                className="btn btn-ghost"
+              >
+                Back
+              </button>
+            </div>
+          </div>
+        )}
+
+        {step === 6 && hasKids === 'yes' && (
+          <form onSubmit={(e) => { e.preventDefault(); goNext(); }}>
+            <h2 className="text-2xl font-bold text-gray-900 mb-2">How old are your children?</h2>
+            <p className="text-sm text-gray-500 mb-6" />
             <div className="flex flex-col gap-3">
-              {childAges.length === 0 && (
-                <p className="text-sm text-gray-500 py-2">No children</p>
-              )}
               {childAges.map((childAge, index) => (
                 <div key={index} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
                   <span className="text-sm font-medium text-gray-600 w-16 shrink-0">
@@ -500,13 +534,14 @@ export default function HouseholdWizard({ onComplete, onBack, onPartialChange }:
             <div className="flex justify-between mt-8">
               <button
                 type="button"
-                onClick={goBack}
+                onClick={() => { setHasKids(null); setChildAges([]); }}
                 className="btn btn-ghost"
               >
                 Back
               </button>
               <button
                 type="submit"
+                disabled={childAges.length === 0}
                 className="btn btn-primary"
               >
                 Continue
