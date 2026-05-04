@@ -14,6 +14,17 @@ interface CachedBaseline {
   acaPremiums?: { before?: unknown };
 }
 
+interface SavedScenario {
+  id: string;
+  event: LifeEventType;
+  params: Record<string, unknown>;
+  result: SimulationResult;
+}
+
+function newScenarioId(): string {
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
 function encodeScenario(household: Household, event: LifeEventType, params: Record<string, unknown>): string {
   return btoa(JSON.stringify({ h: household, e: event, p: params }));
 }
@@ -46,11 +57,15 @@ export default function Home() {
   const [partialHousehold, setPartialHousehold] = useState<Partial<Household>>({});
   const [selectedEvent, setSelectedEvent] = useState<LifeEventType | null>(null);
   const [eventParams, setEventParams] = useState<Record<string, unknown>>({});
-  const [result, setResult] = useState<SimulationResult | null>(null);
+  const [scenarios, setScenarios] = useState<SavedScenario[]>([]);
+  const [currentScenarioId, setCurrentScenarioId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [shareUrl, setShareUrl] = useState<string | null>(null);
   const [showCopied, setShowCopied] = useState(false);
+
+  const result = scenarios.find((s) => s.id === currentScenarioId)?.result ?? null;
+  const otherScenarios = scenarios.filter((s) => s.id !== currentScenarioId);
 
   // Pre-warmed baseline cache. Populated by /api/baseline during the user's
   // "thinking time" between wizard completion and Apply, then sent with the
@@ -84,7 +99,6 @@ export default function Home() {
   ) => {
     setIsLoading(true);
     setError(null);
-    setResult(null);
     try {
       const cachedBefore =
         baselineCacheRef.current && baselineHouseholdRef.current === h
@@ -102,7 +116,9 @@ export default function Home() {
       const data = await response.json();
       if (data.error) throw new Error(data.error);
       if (!data.before || !data.after) throw new Error('Invalid response from simulation');
-      setResult(data);
+      const id = newScenarioId();
+      setScenarios((prev) => [...prev, { id, event, params, result: data }]);
+      setCurrentScenarioId(id);
       const encoded = encodeScenario(h, event, params);
       const url = `${window.location.origin}?s=${encoded}`;
       setShareUrl(url);
@@ -112,6 +128,21 @@ export default function Home() {
     } finally {
       setIsLoading(false);
     }
+  }, []);
+
+  const restoreScenario = useCallback((s: SavedScenario, h: Household) => {
+    setCurrentScenarioId(s.id);
+    setSelectedEvent(s.event);
+    setEventParams(s.params);
+    setError(null);
+    const encoded = encodeScenario(h, s.event, s.params);
+    setShareUrl(`${window.location.origin}?s=${encoded}`);
+    window.history.replaceState({}, '', `?s=${encoded}`);
+  }, []);
+
+  const removeScenario = useCallback((id: string) => {
+    setScenarios((prev) => prev.filter((s) => s.id !== id));
+    setCurrentScenarioId((curr) => (curr === id ? null : curr));
   }, []);
 
   useEffect(() => {
@@ -132,7 +163,8 @@ export default function Home() {
     setHousehold(h);
     setSelectedEvent(null);
     setEventParams({});
-    setResult(null);
+    setScenarios([]);
+    setCurrentScenarioId(null);
     setError(null);
     // Pre-warm the baseline simulation in the background while the user
     // picks a life event. By the time they click Apply, only the after-sim
@@ -164,7 +196,8 @@ export default function Home() {
     setHousehold(null);
     setSelectedEvent(null);
     setEventParams({});
-    setResult(null);
+    setScenarios([]);
+    setCurrentScenarioId(null);
     setError(null);
     setShareUrl(null);
     baselineCacheRef.current = null;
@@ -276,7 +309,7 @@ export default function Home() {
             household={household}
             onEditHousehold={handleReset}
             selectedEvent={selectedEvent}
-            onEventSelect={(e) => { setSelectedEvent(e); setResult(null); }}
+            onEventSelect={(e) => { setSelectedEvent(e); }}
             eventParams={eventParams}
             onParamsChange={setEventParams}
             onRun={handleRun}
@@ -316,10 +349,74 @@ export default function Home() {
           </div>
         )}
 
+        {/* Saved scenarios — older results from this household */}
+        {household && otherScenarios.length > 0 && (
+          <div className="mt-6">
+            <div className="text-[10px] font-semibold uppercase tracking-widest text-gray-400 mb-2 px-1">
+              Compared scenarios
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+              {otherScenarios.map((s) => (
+                <ScenarioCard
+                  key={s.id}
+                  scenario={s}
+                  onClick={() => restoreScenario(s, household)}
+                  onRemove={() => removeScenario(s.id)}
+                />
+              ))}
+            </div>
+          </div>
+        )}
+
         <footer className="mt-10 text-xs text-gray-400">
           <span>Powered by <a href="https://policyengine.org" target="_blank" rel="noopener noreferrer" className="text-[#319795] font-medium">PolicyEngine</a></span>
         </footer>
       </div>
+    </div>
+  );
+}
+
+interface ScenarioCardProps {
+  scenario: SavedScenario;
+  onClick: () => void;
+  onRemove: () => void;
+}
+
+function ScenarioCard({ scenario, onClick, onRemove }: ScenarioCardProps) {
+  const label = LIFE_EVENTS.find((e) => e.type === scenario.event)?.label ?? scenario.event;
+  const metrics = scenario.result.before?.metrics ?? [];
+  const netBefore = metrics.find((m) => m.name === 'marketplace_net_premium')?.before ?? 0;
+  const netAfter = metrics.find((m) => m.name === 'marketplace_net_premium')?.after ?? 0;
+  const monthlyDelta = (netAfter - netBefore) / 12;
+  const isCost = monthlyDelta > 0.5;
+  const isSavings = monthlyDelta < -0.5;
+  const tone = isCost ? 'text-red-600' : isSavings ? 'text-green-600' : 'text-gray-500';
+  const sign = isCost ? '+' : isSavings ? '−' : '';
+  const amount = `$${Math.abs(Math.round(monthlyDelta)).toLocaleString()}`;
+  return (
+    <div className="relative group">
+      <button
+        type="button"
+        onClick={onClick}
+        className="w-full text-left bg-white border border-gray-200 hover:border-[#319795] hover:shadow-sm rounded-xl p-3 pr-8 transition-all"
+      >
+        <div className="text-[10px] font-semibold uppercase tracking-widest text-[#285E61] mb-1">
+          {label}
+        </div>
+        <div className={`text-base font-semibold tabular-nums ${tone}`}>
+          {monthlyDelta === 0 ? 'No monthly change' : `${sign}${amount}/mo`}
+        </div>
+      </button>
+      <button
+        type="button"
+        onClick={(e) => { e.stopPropagation(); onRemove(); }}
+        aria-label="Remove scenario"
+        className="absolute top-2 right-2 p-1 text-gray-300 hover:text-gray-700 hover:bg-gray-100 rounded transition-colors opacity-0 group-hover:opacity-100"
+      >
+        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+        </svg>
+      </button>
     </div>
   );
 }
