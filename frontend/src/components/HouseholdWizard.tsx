@@ -152,6 +152,8 @@ export default function HouseholdWizard({ onComplete, onBack, onPartialChange }:
   const step1Valid = zip.length === 5 && detectedState !== null;
   const step3Valid = age !== '' && parseInt(age, 10) >= 18 && (!married || (partnerAge !== '' && parseInt(partnerAge, 10) >= 18));
   const step4Valid = monthlyIncome !== '' && (!married || partnerMonthlyIncome !== '');
+  const isHOH = filingStatus === 'head_of_household';
+  const step6Valid = !isHOH || childAges.length > 0;
 
   return (
     <div className="max-w-lg mx-auto">
@@ -434,8 +436,13 @@ export default function HouseholdWizard({ onComplete, onBack, onPartialChange }:
         )}
 
         {step === 6 && (
-          <form onSubmit={(e) => { e.preventDefault(); goNext(); }}>
+          <form onSubmit={(e) => { e.preventDefault(); if (step6Valid) goNext(); }}>
             <h2 className="text-2xl font-bold text-gray-900 mb-2">Do you have any children under 18?</h2>
+            {isHOH && (
+              <p className="text-sm text-[#92400E] bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-4">
+                Head of household requires at least one dependent. Add a child below, or go back and pick a different filing status.
+              </p>
+            )}
             <p className="text-sm text-gray-500 mb-6" />
             <div className="flex flex-col gap-3">
               {childAges.length === 0 && (
@@ -494,6 +501,7 @@ export default function HouseholdWizard({ onComplete, onBack, onPartialChange }:
               </button>
               <button
                 type="submit"
+                disabled={!step6Valid}
                 className="btn btn-primary"
               >
                 Continue
