@@ -394,8 +394,9 @@ def _apply_cached_before(response: dict, cached_before: dict) -> dict:
         response["after"]["totalBenefits"] - total_benefits_before
     )
 
-    if "healthcareBefore" in cached_before:
-        response["healthcareBefore"] = cached_before["healthcareBefore"]
+    # Don't overlay healthcareBefore: the fresh sim's value may include
+    # counterfactual people (e.g. the future spouse and their kids in a
+    # marriage scenario), which the cached baseline doesn't have.
 
     aca_cached = (cached_before.get("acaPremiums") or {}).get("before")
     if aca_cached and "acaPremiums" in response:
