@@ -237,7 +237,7 @@ export default function Home() {
                     What if something changed?
                   </h1>
                   <p className="text-[15px] text-gray-500 leading-relaxed">
-                    Tap any field below — <b className="text-gray-700">income</b>, <b className="text-gray-700">filing status</b>, <b className="text-gray-700">location</b>, <b className="text-gray-700">job coverage</b>, or <b className="text-gray-700">children</b> — to see how it changes your healthcare picture.
+                    Tap any field below (<b className="text-gray-700">income</b>, <b className="text-gray-700">filing status</b>, <b className="text-gray-700">location</b>, <b className="text-gray-700">job coverage</b>, or <b className="text-gray-700">children</b>) to see how it changes your healthcare picture.
                   </p>
                 </div>
                 <button
@@ -272,7 +272,7 @@ export default function Home() {
           />
         )}
 
-        {/* Household entered — show change wizard until results are ready */}
+        {/* Household entered: show change wizard until results are ready */}
         {household && !isLoading && !result && (
           <ChangeWizard
             household={household}
@@ -315,7 +315,7 @@ export default function Home() {
           </div>
         )}
 
-        {/* Saved scenarios — older results from this household */}
+        {/* Saved scenarios: older results from this household */}
         {household && otherScenarios.length > 0 && (
           <div className="mt-6">
             <div className="text-[10px] font-semibold uppercase tracking-widest text-gray-400 mb-2 px-1">

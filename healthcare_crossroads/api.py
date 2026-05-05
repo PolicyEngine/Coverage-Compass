@@ -8,6 +8,7 @@ from typing import Any, Optional
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 
+from .aca_data import get_bronze_silver_ratio
 from .compare import compare, compare_multiple, run_baseline
 from .events import (
     ChildAgingOut,
@@ -160,6 +161,18 @@ def create_event_from_request(event_type: str, params: dict, household: Househol
     return event_map[event_type]()
 
 
+def _extract_state_code(situation: dict[str, Any]) -> str:
+    """Pull the state code out of a PolicyEngine situation dict."""
+    state = (
+        situation.get("households", {})
+        .get("household", {})
+        .get("state_code", {})
+    )
+    if isinstance(state, dict):
+        return next(iter(state.values()), "US")
+    return state or "US"
+
+
 def _household_hash(household_dict: dict) -> str:
     """Stable canonical-JSON SHA256 hash of a household input dict.
 
@@ -176,20 +189,40 @@ def _aca_premium_side(
     lcbp: float,
     ptc: float,
     net_premium: float,
+    state: str,
 ) -> dict[str, Any]:
     """Build one side (before or after) of the acaPremiums payload.
 
-    PolicyEngine US provides real lowest-cost-bronze-plan data from 2026
-    onward. If lcbp is missing or implausible (>= silver benchmark) we
-    return 0 for bronze and let the frontend hide that tier.
+    PolicyEngine US has reliable lcbp (lowest-cost bronze plan) data for
+    HC.gov states from 2026 onward. State-exchange states (CA, NY, CO,
+    DC, MA, NJ, etc.) currently get no lcbp data, so we estimate bronze
+    from the state-average bronze/silver ratio.
+
+    Silver net is computed from slcsp - ptc rather than PolicyEngine's
+    `marketplace_net_premium` because the latter returns 0 when the
+    household isn't enrolled (e.g. on Medicaid). For the plan-options
+    card we want the hypothetical cost.
     """
-    bronze = lcbp if 0 < lcbp < slcsp else 0.0
+    if 0 < lcbp < slcsp:
+        bronze = lcbp
+        bronze_is_estimate = False
+    elif slcsp > 0:
+        bronze = slcsp * get_bronze_silver_ratio(state)
+        bronze_is_estimate = True
+    else:
+        bronze = 0.0
+        bronze_is_estimate = False
+
+    silver_net_computed = max(0.0, slcsp - ptc)
+    silver_net = net_premium if net_premium > 0 else silver_net_computed
+
     return {
         "silverGross": slcsp,
-        "silverNet": net_premium,
+        "silverNet": silver_net,
         "bronzeGross": bronze,
         "bronzeNet": max(0.0, bronze - ptc),
         "ptc": ptc,
+        "bronzeIsEstimate": bronze_is_estimate,
     }
 
 
@@ -260,18 +293,21 @@ def format_result_for_frontend(result) -> dict:
     net_change = result.changes.get("marketplace_net_premium")
     ptc_change = result.changes.get("premium_tax_credit")
     if slcsp_change and (slcsp_change.before > 0 or slcsp_change.after > 0):
+        state = _extract_state_code(result.before_situation)
         response["acaPremiums"] = {
             "before": _aca_premium_side(
                 slcsp=slcsp_change.before,
                 lcbp=lcbp_change.before if lcbp_change else 0,
                 ptc=ptc_change.before if ptc_change else 0,
                 net_premium=net_change.before if net_change else 0,
+                state=state,
             ),
             "after": _aca_premium_side(
                 slcsp=slcsp_change.after,
                 lcbp=lcbp_change.after if lcbp_change else 0,
                 ptc=ptc_change.after if ptc_change else 0,
                 net_premium=net_change.after if net_change else 0,
+                state=state,
             ),
         }
 
@@ -315,12 +351,14 @@ def run_baseline_response(household_dict: dict) -> dict:
 
     slcsp_b = baseline.results.get("slcsp", 0.0)
     if slcsp_b > 0:
+        state = _extract_state_code(baseline.situation)
         response["acaPremiums"] = {
             "before": _aca_premium_side(
                 slcsp=slcsp_b,
                 lcbp=baseline.results.get("lcbp", 0.0),
                 ptc=baseline.results.get("premium_tax_credit", 0.0),
                 net_premium=baseline.results.get("marketplace_net_premium", 0.0),
+                state=state,
             ),
         }
 

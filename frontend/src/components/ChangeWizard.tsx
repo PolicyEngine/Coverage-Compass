@@ -304,7 +304,7 @@ export default function ChangeWizard({ household, onApply }: ChangeWizardProps) 
                       }
                     }}
                     className={inputClass()}
-                    placeholder="Optional — used for more accurate ACA premiums"
+                    placeholder="Optional, used for more accurate ACA premiums"
                   />
                 </div>
               </>

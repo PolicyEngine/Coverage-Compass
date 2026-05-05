@@ -559,8 +559,8 @@ export default function HouseholdWizard({ onComplete, onBack, onPartialChange }:
                 <>
                   {(
                     [
-                      { label: 'Yes — me', value: 'head' as const },
-                      { label: 'Yes — my partner', value: 'spouse' as const },
+                      { label: 'Yes, me', value: 'head' as const },
+                      { label: 'Yes, my partner', value: 'spouse' as const },
                       { label: 'No', value: null as null },
                     ]
                   ).map((opt) => (

@@ -13,7 +13,7 @@ interface ResultsViewProps {
 }
 
 // Per-month financial rows we surface in the statement table.
-// CHIP and Medicaid program-cost dollar amounts are intentionally omitted —
+// CHIP and Medicaid program-cost dollar amounts are intentionally omitted:
 // they're shown via per-person coverage pills above; the dollar value to
 // the family (premium contribution) isn't directly modeled.
 const FINANCIAL_METRIC_NAMES = new Set([
@@ -61,14 +61,24 @@ function getCoverageLabel(type: string | null): string {
   }
 }
 
+// Color per coverage type so the eye separates "Marketplace" from "Medicaid"
+// from "ESI" instead of relying on text alone. Each tone is distinct enough
+// to scan quickly but still soft (no alarming saturation).
+const COVERAGE_TONES: Record<string, string> = {
+  ESI: 'bg-blue-50 text-blue-800 border-blue-200',
+  Marketplace: 'bg-[#E6FFFA] text-[#285E61] border-[#319795]/40',
+  Medicaid: 'bg-violet-50 text-violet-800 border-violet-200',
+  CHIP: 'bg-pink-50 text-pink-800 border-pink-200',
+};
+
 function CoveragePill({ type, exists }: { type: string | null; exists: boolean }) {
   if (!exists) {
-    return <span className="text-sm text-gray-300">—</span>;
+    return <span className="text-sm text-gray-300">Not applicable</span>;
   }
   const label = getCoverageLabel(type);
-  const tone = type === null
-    ? 'bg-gray-50 text-gray-500 border-gray-200'
-    : 'bg-gray-100 text-gray-800 border-gray-200';
+  const tone = type && COVERAGE_TONES[type]
+    ? COVERAGE_TONES[type]
+    : 'bg-gray-50 text-gray-500 border-gray-200';
   return (
     <span className={`inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium border ${tone}`}>
       {label}
@@ -130,10 +140,37 @@ function PersonRow({
   );
 }
 
+function TierToggle({ selected, onChange }: { selected: Tier; onChange: (t: Tier) => void }) {
+  return (
+    <div className="inline-flex items-center gap-1 bg-gray-100 rounded-lg p-0.5 mt-1.5">
+      {(['silver', 'bronze'] as Tier[]).map((t) => (
+        <button
+          key={t}
+          type="button"
+          onClick={() => onChange(t)}
+          className={`px-2 py-0.5 rounded-md text-[11px] font-medium capitalize transition-all ${
+            selected === t
+              ? 'bg-white text-gray-900 shadow-sm'
+              : 'text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          {t}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function MetricRow({
   metric,
+  showTierToggle = false,
+  selectedTier,
+  onTierChange,
 }: {
   metric: BenefitMetric;
+  showTierToggle?: boolean;
+  selectedTier?: Tier;
+  onTierChange?: (t: Tier) => void;
 }) {
   const category = METRIC_CATEGORY[metric.name] ?? metric.category.replace('_', ' ');
   const chipKind = METRIC_CHIP_KIND[metric.name] ?? 'cost';
@@ -146,14 +183,17 @@ function MetricRow({
       <td className="px-5 py-3 align-middle">
         <div className="text-sm font-medium text-gray-900">{metric.label}</div>
         <div className="text-[11px] text-gray-400">{category}</div>
+        {showTierToggle && selectedTier && onTierChange && (
+          <TierToggle selected={selectedTier} onChange={onTierChange} />
+        )}
       </td>
       <td className="px-5 py-3 align-middle text-sm tabular-nums text-gray-500">
-        {monthlyBefore === 0 ? <span className="text-gray-300">—</span> : `${formatCurrency(monthlyBefore)}/mo`}
+        {`${formatCurrency(monthlyBefore)}/mo`}
       </td>
       <td className="px-5 py-3 align-middle">
         <div className="flex items-center gap-2 flex-wrap">
           <span className="text-sm tabular-nums text-gray-700">
-            {monthlyAfter === 0 ? <span className="text-gray-300">—</span> : `${formatCurrency(monthlyAfter)}/mo`}
+            {`${formatCurrency(monthlyAfter)}/mo`}
           </span>
           <DiffChip kind={chipKind} monthlyDelta={monthlyDelta} />
         </div>
@@ -192,7 +232,17 @@ function MobilePersonCard({
   );
 }
 
-function MobileMetricCard({ metric }: { metric: BenefitMetric }) {
+function MobileMetricCard({
+  metric,
+  showTierToggle = false,
+  selectedTier,
+  onTierChange,
+}: {
+  metric: BenefitMetric;
+  showTierToggle?: boolean;
+  selectedTier?: Tier;
+  onTierChange?: (t: Tier) => void;
+}) {
   const category = METRIC_CATEGORY[metric.name] ?? metric.category.replace('_', ' ');
   const chipKind = METRIC_CHIP_KIND[metric.name] ?? 'cost';
   const monthlyBefore = metric.before / 12;
@@ -205,6 +255,9 @@ function MobileMetricCard({ metric }: { metric: BenefitMetric }) {
         <div>
           <div className="text-sm font-medium text-gray-900">{metric.label}</div>
           <div className="text-[11px] text-gray-400">{category}</div>
+          {showTierToggle && selectedTier && onTierChange && (
+            <TierToggle selected={selectedTier} onChange={onTierChange} />
+          )}
         </div>
         <DiffChip kind={chipKind} monthlyDelta={monthlyDelta} />
       </div>
@@ -212,68 +265,17 @@ function MobileMetricCard({ metric }: { metric: BenefitMetric }) {
         <div>
           <div className="text-[10px] text-gray-400 uppercase tracking-wider mb-1">Before</div>
           <div className="text-sm tabular-nums text-gray-700">
-            {monthlyBefore === 0 ? <span className="text-gray-300">—</span> : `${formatCurrency(monthlyBefore)}/mo`}
+            {`${formatCurrency(monthlyBefore)}/mo`}
           </div>
         </div>
         <div>
           <div className="text-[10px] text-gray-400 uppercase tracking-wider mb-1">After</div>
           <div className="text-sm tabular-nums text-gray-700">
-            {monthlyAfter === 0 ? <span className="text-gray-300">—</span> : `${formatCurrency(monthlyAfter)}/mo`}
+            {`${formatCurrency(monthlyAfter)}/mo`}
           </div>
         </div>
       </div>
     </div>
-  );
-}
-
-function PlanCard({
-  tier,
-  gross,
-  ptc,
-  net,
-  selected,
-  onClick,
-}: {
-  tier: 'Bronze' | 'Silver';
-  gross: number;
-  ptc: number;
-  net: number;
-  selected: boolean;
-  onClick: () => void;
-}) {
-  const dotColor = tier === 'Bronze' ? 'bg-[#B45309]' : 'bg-[#64748B]';
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-pressed={selected}
-      className={`text-left rounded-xl p-4 bg-white border-2 transition-all cursor-pointer ${
-        selected
-          ? 'border-[#319795] ring-2 ring-[#319795]/20'
-          : 'border-gray-200 hover:border-[#319795]/50'
-      }`}
-    >
-      <div className="flex items-center gap-2 mb-3">
-        <span className={`w-2.5 h-2.5 rounded-sm ${dotColor}`} />
-        <span className="text-sm font-semibold text-gray-900">{tier}</span>
-        {selected && (
-          <span className="ml-auto text-[10px] font-semibold uppercase tracking-widest text-[#285E61]">Selected</span>
-        )}
-      </div>
-      <div className="text-2xl font-bold text-gray-900 tabular-nums mb-0.5">
-        {formatCurrency(net / 12)} <span className="text-xs font-medium text-gray-500">/mo your cost</span>
-      </div>
-      <div className="border-t border-gray-100 mt-3 pt-3 space-y-1.5 text-xs text-gray-500">
-        <div className="flex justify-between">
-          <span>Full premium</span>
-          <span className="tabular-nums text-gray-700">{formatCurrency(gross / 12)}/mo</span>
-        </div>
-        <div className="flex justify-between">
-          <span>Your tax credit</span>
-          <span className="tabular-nums text-[#285E61]">−{formatCurrency(ptc / 12)}/mo</span>
-        </div>
-      </div>
-    </button>
   );
 }
 
@@ -333,7 +335,7 @@ export default function ResultsView({ result, eventType, onTryAnother, onReset }
     ? Array.from(beforeLabels)
     : Array.from(new Set([...beforeLabels, ...afterLabels]));
 
-  // Detect ESI transitions — these make the hero net-change number incomplete
+  // Detect ESI transitions. These make the hero net-change number incomplete
   // because we don't model employer premium contributions.
   const beforeESI = (result.healthcareBefore?.people || []).some((p) => p.coverage === 'ESI');
   const afterESI = (result.healthcareAfter?.people || []).some((p) => p.coverage === 'ESI');
@@ -385,7 +387,7 @@ export default function ResultsView({ result, eventType, onTryAnother, onReset }
         </div>
       )}
 
-      {/* Unified statement — desktop table */}
+      {/* Unified statement: desktop table */}
       <div className="hidden sm:block bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
         <table className="w-full border-collapse">
           <colgroup>
@@ -427,7 +429,13 @@ export default function ResultsView({ result, eventType, onTryAnother, onReset }
               <>
                 <SectionLabel>Per-month financial impact</SectionLabel>
                 {financialMetrics.map((m) => (
-                  <MetricRow key={m.name} metric={m} />
+                  <MetricRow
+                    key={m.name}
+                    metric={m}
+                    showTierToggle={m.name === 'marketplace_net_premium' && showAcaPlans && (acaScope?.bronzeGross ?? 0) > 0}
+                    selectedTier={selectedTier}
+                    onTierChange={setSelectedTier}
+                  />
                 ))}
               </>
             )}
@@ -435,7 +443,7 @@ export default function ResultsView({ result, eventType, onTryAnother, onReset }
         </table>
       </div>
 
-      {/* Unified statement — mobile stacked cards */}
+      {/* Unified statement: mobile stacked cards */}
       <div className="sm:hidden bg-white border border-gray-200 rounded-xl shadow-sm p-4 space-y-4">
         <div>
           <div className="text-[10px] font-semibold uppercase tracking-widest text-gray-400 mb-2">
@@ -466,46 +474,26 @@ export default function ResultsView({ result, eventType, onTryAnother, onReset }
             </div>
             <div className="space-y-2">
               {financialMetrics.map((m) => (
-                <MobileMetricCard key={m.name} metric={m} />
+                <MobileMetricCard
+                  key={m.name}
+                  metric={m}
+                  showTierToggle={m.name === 'marketplace_net_premium' && showAcaPlans && (acaScope?.bronzeGross ?? 0) > 0}
+                  selectedTier={selectedTier}
+                  onTierChange={setSelectedTier}
+                />
               ))}
             </div>
           </div>
         )}
       </div>
 
-      {/* ACA marketplace plans sub-card */}
+      {/* ACA marketplace context note: visible only when marketplace is in play */}
       {showAcaPlans && acaScope && (
-        <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
-          <h3 className="text-sm font-semibold text-gray-900 mb-3">
-            ACA marketplace plan options
-            <span className="ml-2 text-[11px] font-normal text-gray-400">— same tax credit applies to any tier</span>
-          </h3>
-          <div className={`grid grid-cols-1 ${acaScope.bronzeGross > 0 ? 'sm:grid-cols-2' : ''} gap-3`}>
-            {acaScope.bronzeGross > 0 && (
-              <PlanCard
-                tier="Bronze"
-                gross={acaScope.bronzeGross}
-                ptc={acaScope.ptc}
-                net={acaScope.bronzeNet}
-                selected={selectedTier === 'bronze'}
-                onClick={() => setSelectedTier('bronze')}
-              />
-            )}
-            <PlanCard
-              tier="Silver"
-              gross={acaScope.silverGross}
-              ptc={acaScope.ptc}
-              net={acaScope.silverNet}
-              selected={selectedTier === 'silver'}
-              onClick={() => setSelectedTier('silver')}
-            />
-          </div>
-          <p className="text-[11px] text-gray-400 mt-3 leading-relaxed">
-            Silver is the ACA&apos;s benchmark plan: your tax credit is set to keep its monthly cost at a fixed share of
-            your income, so silver&apos;s cost doesn&apos;t change when only your state or area changes.
-            {acaScope.bronzeGross > 0 && ' Bronze costs less per month but has higher deductibles, and its cost floats with local premiums.'}
-          </p>
-        </div>
+        <p className="text-[11px] text-gray-400 leading-relaxed px-1">
+          Silver is the ACA&apos;s benchmark plan: your tax credit is set to keep its monthly cost at a fixed share of your
+          income, so silver&apos;s cost doesn&apos;t change when only your state or area changes.
+          {acaScope.bronzeGross > 0 && ' Bronze costs less per month but has higher deductibles, and its cost floats with local premiums.'}
+        </p>
       )}
 
       <div className="flex justify-center gap-3 flex-wrap pt-2">
