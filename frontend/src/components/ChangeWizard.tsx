@@ -216,6 +216,16 @@ export default function ChangeWizard({ household, onApply }: ChangeWizardProps) 
             <h2 className="text-xl font-bold text-gray-900">What&apos;s changing?</h2>
             <p className="text-sm text-gray-500 mt-1">Pick the life event you want to model.</p>
           </div>
+
+          {(household.hasESI || household.spouseHasESI) && (
+            <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5">
+              <p className="text-sm text-[#92400E] leading-relaxed">
+                <b>Heads-up:</b> {household.hasESI && household.spouseHasESI ? 'you both have' : 'you or your partner has'} employer-sponsored insurance.
+                We don&apos;t model what your employer charges in monthly premiums, so cost comparisons against ACA marketplace plans
+                may be incomplete.
+              </p>
+            </div>
+          )}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             {events.map((opt) => (
               <button

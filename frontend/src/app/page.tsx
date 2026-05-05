@@ -1,18 +1,10 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import HouseholdWizard from '@/components/HouseholdWizard';
 import ChangeWizard from '@/components/ChangeWizard';
 import ResultsView from '@/components/ResultsView';
 import { Household, LifeEventType, SimulationResult, LIFE_EVENTS } from '@/types';
-
-interface CachedBaseline {
-  householdHash: string;
-  metrics?: unknown;
-  netIncome?: number;
-  healthcareBefore?: unknown;
-  acaPremiums?: { before?: unknown };
-}
 
 interface SavedScenario {
   id: string;
@@ -67,28 +59,18 @@ export default function Home() {
   const result = scenarios.find((s) => s.id === currentScenarioId)?.result ?? null;
   const otherScenarios = scenarios.filter((s) => s.id !== currentScenarioId);
 
-  // Pre-warmed baseline cache. Populated by /api/baseline during the user's
-  // "thinking time" between wizard completion and Apply, then sent with the
-  // simulate request so the server can skip the before-sim.
-  const baselineCacheRef = useRef<CachedBaseline | null>(null);
-  const baselineHouseholdRef = useRef<Household | null>(null);
-
-  const prewarmBaseline = useCallback(async (h: Household) => {
-    baselineCacheRef.current = null;
-    baselineHouseholdRef.current = h;
+  // Fire a no-op /api/baseline request when the wizard completes. This
+  // doesn't return useful data anymore, but it warms the Modal container
+  // so the subsequent /api/simulate call on Apply doesn't pay a cold start.
+  const warmBackend = useCallback(async (h: Household) => {
     try {
-      const response = await fetch('/api/baseline', {
+      await fetch('/api/baseline', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ household: h }),
       });
-      if (!response.ok) return;
-      const data = await response.json();
-      if (data?.householdHash && baselineHouseholdRef.current === h) {
-        baselineCacheRef.current = data as CachedBaseline;
-      }
     } catch {
-      // Pre-warm is opportunistic; ignore failures and fall back to full sim.
+      // Best-effort warm-up; ignore failures.
     }
   }, []);
 
@@ -100,17 +82,12 @@ export default function Home() {
     setIsLoading(true);
     setError(null);
     try {
-      const cachedBefore =
-        baselineCacheRef.current && baselineHouseholdRef.current === h
-          ? baselineCacheRef.current
-          : undefined;
       const response = await fetch('/api/simulate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           household: h,
           lifeEvent: { type: event, params },
-          ...(cachedBefore ? { cachedBefore } : {}),
         }),
       });
       const data = await response.json();
@@ -166,10 +143,9 @@ export default function Home() {
     setScenarios([]);
     setCurrentScenarioId(null);
     setError(null);
-    // Pre-warm the baseline simulation in the background while the user
-    // picks a life event. By the time they click Apply, only the after-sim
-    // is needed.
-    prewarmBaseline(h);
+    // Warm the Modal container in the background so the Apply spinner is
+    // shorter (avoids paying a cold start on the /api/simulate call).
+    warmBackend(h);
   };
 
   const handleRun = () => {
@@ -193,8 +169,8 @@ export default function Home() {
   };
 
   const handleTryAnother = () => {
-    // Keep household, scenarios history, and pre-warmed baseline.
-    // Clear the active event/result so the user can model a new what-if.
+    // Keep household + scenario history. Clear the active event/result so
+    // the user can model a new what-if.
     setSelectedEvent(null);
     setEventParams({});
     setCurrentScenarioId(null);
@@ -211,8 +187,6 @@ export default function Home() {
     setCurrentScenarioId(null);
     setError(null);
     setShareUrl(null);
-    baselineCacheRef.current = null;
-    baselineHouseholdRef.current = null;
     window.history.replaceState({}, '', window.location.pathname);
   };
 

@@ -333,6 +333,12 @@ export default function ResultsView({ result, eventType, onTryAnother, onReset }
     ? Array.from(beforeLabels)
     : Array.from(new Set([...beforeLabels, ...afterLabels]));
 
+  // Detect ESI transitions — these make the hero net-change number incomplete
+  // because we don't model employer premium contributions.
+  const beforeESI = (result.healthcareBefore?.people || []).some((p) => p.coverage === 'ESI');
+  const afterESI = (result.healthcareAfter?.people || []).some((p) => p.coverage === 'ESI');
+  const esiInPlay = beforeESI || afterESI;
+
   // Financial rows. Marketplace premium row uses the selected tier's net cost.
   const tierLabel = selectedTier === 'bronze' ? 'Bronze plan (your cost)' : 'Silver plan (your cost)';
   const financialMetrics = metrics
@@ -353,7 +359,7 @@ export default function ResultsView({ result, eventType, onTryAnother, onReset }
           <div className="flex items-baseline gap-3 sm:gap-6 flex-col sm:flex-row sm:flex-wrap">
             <div>
               <div className="text-[10px] font-semibold uppercase tracking-widest text-gray-400 mb-1">
-                Net change
+                Net change in marketplace cost
               </div>
               <div className={`text-3xl sm:text-4xl font-bold tabular-nums ${heroTone}`}>
                 {heroSign}{heroAmount}
@@ -361,11 +367,21 @@ export default function ResultsView({ result, eventType, onTryAnother, onReset }
               </div>
             </div>
             <p className="text-sm text-gray-500 leading-relaxed flex-1 sm:min-w-[260px] max-w-prose">
-              After this event, your household&apos;s monthly out-of-pocket changes from{' '}
+              Your household&apos;s ACA marketplace premium changes from{' '}
               <b className="text-gray-700 tabular-nums">{formatCurrency(netBefore)}</b> to{' '}
-              <b className="text-gray-700 tabular-nums">{formatCurrency(netAfter)}</b>, after applying any tax credits.
+              <b className="text-gray-700 tabular-nums">{formatCurrency(netAfter)}</b>/mo, after applying any tax credits.
             </p>
           </div>
+        </div>
+      )}
+
+      {esiInPlay && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+          <p className="text-sm text-[#92400E] leading-relaxed">
+            <b>Note:</b> employer-sponsored insurance is in play here.
+            We don&apos;t model the employee premium contribution your employer charges, so the net-change number above only
+            reflects ACA marketplace premiums and may understate or overstate your real out-of-pocket change.
+          </p>
         </div>
       )}
 
@@ -460,21 +476,21 @@ export default function ResultsView({ result, eventType, onTryAnother, onReset }
       {/* ACA marketplace plans sub-card */}
       {showAcaPlans && acaScope && (
         <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
-          <div className="flex items-baseline justify-between mb-3 gap-4 flex-wrap">
-            <div>
-              <h3 className="text-sm font-semibold text-gray-900">ACA marketplace plan options</h3>
-              <p className="text-[11px] text-gray-400 mt-0.5">Same tax credit applies to any tier</p>
-            </div>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <PlanCard
-              tier="Bronze"
-              gross={acaScope.bronzeGross}
-              ptc={acaScope.ptc}
-              net={acaScope.bronzeNet}
-              selected={selectedTier === 'bronze'}
-              onClick={() => setSelectedTier('bronze')}
-            />
+          <h3 className="text-sm font-semibold text-gray-900 mb-3">
+            ACA marketplace plan options
+            <span className="ml-2 text-[11px] font-normal text-gray-400">— same tax credit applies to any tier</span>
+          </h3>
+          <div className={`grid grid-cols-1 ${acaScope.bronzeGross > 0 ? 'sm:grid-cols-2' : ''} gap-3`}>
+            {acaScope.bronzeGross > 0 && (
+              <PlanCard
+                tier="Bronze"
+                gross={acaScope.bronzeGross}
+                ptc={acaScope.ptc}
+                net={acaScope.bronzeNet}
+                selected={selectedTier === 'bronze'}
+                onClick={() => setSelectedTier('bronze')}
+              />
+            )}
             <PlanCard
               tier="Silver"
               gross={acaScope.silverGross}
@@ -486,8 +502,8 @@ export default function ResultsView({ result, eventType, onTryAnother, onReset }
           </div>
           <p className="text-[11px] text-gray-400 mt-3 leading-relaxed">
             Silver is the ACA&apos;s benchmark plan: your tax credit is set to keep its monthly cost at a fixed share of
-            your income, so silver&apos;s &ldquo;your cost&rdquo; doesn&apos;t change when only your state or area changes.
-            Bronze costs less per month but has higher deductibles, and its cost floats with local premiums.
+            your income, so silver&apos;s cost doesn&apos;t change when only your state or area changes.
+            {acaScope.bronzeGross > 0 && ' Bronze costs less per month but has higher deductibles, and its cost floats with local premiums.'}
           </p>
         </div>
       )}

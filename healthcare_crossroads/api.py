@@ -8,7 +8,6 @@ from typing import Any, Optional
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 
-from .aca_data import get_bronze_silver_ratio
 from .compare import compare, compare_multiple, run_baseline
 from .events import (
     ChildAgingOut,
@@ -164,24 +163,12 @@ def create_event_from_request(event_type: str, params: dict, household: Househol
 def _household_hash(household_dict: dict) -> str:
     """Stable canonical-JSON SHA256 hash of a household input dict.
 
-    Used as a cache key so the frontend can pre-warm the baseline during the
-    user's "thinking time" and have the server validate that the cached
-    baseline still corresponds to the current household at Apply time.
+    Returned by /api/baseline so the frontend can opaquely cache results.
+    No longer used to short-circuit /api/simulate (the overlay never
+    actually skipped work, just rewrote response numbers).
     """
     canonical = json.dumps(household_dict, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
-
-
-def _extract_state_code(situation: dict[str, Any]) -> str:
-    """Pull the state code out of a PolicyEngine situation dict."""
-    state = (
-        situation.get("households", {})
-        .get("household", {})
-        .get("state_code", {})
-    )
-    if isinstance(state, dict):
-        return next(iter(state.values()), "US")
-    return state or "US"
 
 
 def _aca_premium_side(
@@ -189,19 +176,20 @@ def _aca_premium_side(
     lcbp: float,
     ptc: float,
     net_premium: float,
-    state: str,
 ) -> dict[str, Any]:
-    """Build one side (before or after) of the acaPremiums payload."""
-    use_real_bronze = lcbp > 0 and lcbp < slcsp
-    bronze_ratio = get_bronze_silver_ratio(state)
-    bronze = lcbp if use_real_bronze else slcsp * bronze_ratio
+    """Build one side (before or after) of the acaPremiums payload.
+
+    PolicyEngine US provides real lowest-cost-bronze-plan data from 2026
+    onward. If lcbp is missing or implausible (>= silver benchmark) we
+    return 0 for bronze and let the frontend hide that tier.
+    """
+    bronze = lcbp if 0 < lcbp < slcsp else 0.0
     return {
         "silverGross": slcsp,
         "silverNet": net_premium,
         "bronzeGross": bronze,
         "bronzeNet": max(0.0, bronze - ptc),
         "ptc": ptc,
-        "bronzeIsEstimate": not use_real_bronze,
     }
 
 
@@ -272,21 +260,18 @@ def format_result_for_frontend(result) -> dict:
     net_change = result.changes.get("marketplace_net_premium")
     ptc_change = result.changes.get("premium_tax_credit")
     if slcsp_change and (slcsp_change.before > 0 or slcsp_change.after > 0):
-        state = _extract_state_code(result.before_situation)
         response["acaPremiums"] = {
             "before": _aca_premium_side(
                 slcsp=slcsp_change.before,
                 lcbp=lcbp_change.before if lcbp_change else 0,
                 ptc=ptc_change.before if ptc_change else 0,
                 net_premium=net_change.before if net_change else 0,
-                state=state,
             ),
             "after": _aca_premium_side(
                 slcsp=slcsp_change.after,
                 lcbp=lcbp_change.after if lcbp_change else 0,
                 ptc=ptc_change.after if ptc_change else 0,
                 net_premium=net_change.after if net_change else 0,
-                state=state,
             ),
         }
 
@@ -330,77 +315,14 @@ def run_baseline_response(household_dict: dict) -> dict:
 
     slcsp_b = baseline.results.get("slcsp", 0.0)
     if slcsp_b > 0:
-        state = _extract_state_code(baseline.situation)
         response["acaPremiums"] = {
             "before": _aca_premium_side(
                 slcsp=slcsp_b,
                 lcbp=baseline.results.get("lcbp", 0.0),
                 ptc=baseline.results.get("premium_tax_credit", 0.0),
                 net_premium=baseline.results.get("marketplace_net_premium", 0.0),
-                state=state,
             ),
         }
-
-    return response
-
-
-def _apply_cached_before(response: dict, cached_before: dict) -> dict:
-    """Overlay cached baseline values onto a freshly-built simulate response.
-
-    The caller has already validated that the cache hash matches the current
-    household. We replace the before-side metrics, healthcareBefore, and
-    acaPremiums.before with the cached values, then recompute totals/diffs.
-
-    The point of caching is correctness *and* perf — the cached values come
-    from a baseline-only sim that should match what an after-cache sim would
-    have produced. We still recompute aggregates from the cached numbers so
-    the response is internally consistent.
-    """
-    cached_metrics = cached_before.get("metrics") or []
-    cached_by_name = {m["name"]: m for m in cached_metrics}
-
-    new_metrics = []
-    for m in response["before"]["metrics"]:
-        cached = cached_by_name.get(m["name"])
-        if cached is not None:
-            m = {**m, "before": cached["before"]}
-        new_metrics.append(m)
-    response["before"]["metrics"] = new_metrics
-
-    # Recompute before-side totals from the (possibly cached) metrics.
-    total_tax_before = sum(
-        m["before"] for m in new_metrics if m["category"] == "tax"
-    )
-    total_benefits_before = sum(
-        m["before"] for m in new_metrics if m["category"] in ("benefit", "credit")
-    )
-    response["before"]["totalTax"] = total_tax_before
-    response["before"]["totalBenefits"] = total_benefits_before
-
-    # Mirror metrics into the after-side baseline column.
-    response["after"]["metrics"] = [
-        {**m, "before": m["after"]} for m in new_metrics
-    ]
-
-    if "netIncome" in cached_before:
-        response["before"]["netIncome"] = cached_before["netIncome"]
-        response["diff"]["netIncome"] = (
-            response["after"]["netIncome"] - cached_before["netIncome"]
-        )
-
-    # Recompute diffs against the cached before.
-    response["diff"]["totalTax"] = response["after"]["totalTax"] - total_tax_before
-    response["diff"]["totalBenefits"] = (
-        response["after"]["totalBenefits"] - total_benefits_before
-    )
-
-    # Don't overlay healthcareBefore: the fresh sim's value may include
-    # counterfactual people (e.g. the future spouse and their kids in a
-    # marriage scenario), which the cached baseline doesn't have.
-
-    aca_cached = (cached_before.get("acaPremiums") or {}).get("before")
-    if aca_cached and "acaPremiums" in response:
-        response["acaPremiums"]["before"] = aca_cached
 
     return response
 
@@ -410,16 +332,7 @@ def simulate():
     """Run a life event simulation (single or multiple events)."""
     try:
         data = request.get_json()
-        household_dict = data.get("household", {})
-        household = create_household_from_request(household_dict)
-
-        # Optional: client-side baseline cache pre-warmed during wizard "thinking time".
-        # Only used if its hash matches the canonical hash of the current household.
-        cached_before = data.get("cachedBefore")
-        cache_is_valid = (
-            isinstance(cached_before, dict)
-            and cached_before.get("householdHash") == _household_hash(household_dict)
-        )
+        household = create_household_from_request(data.get("household", {}))
 
         # Support both single event and multiple events
         life_events = data.get("lifeEvents", [])
@@ -450,10 +363,7 @@ def simulate():
         else:
             raise ValueError("No life event provided")
 
-        response = format_result_for_frontend(result)
-        if cache_is_valid:
-            response = _apply_cached_before(response, cached_before)
-        return jsonify(response)
+        return jsonify(format_result_for_frontend(result))
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
     except Exception as e:
