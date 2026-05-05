@@ -266,10 +266,13 @@ export default function Home() {
 
         {/* Wizard (no household yet) */}
         {!household && (
-          <HouseholdWizard
-            onComplete={handleWizardComplete}
-            onPartialChange={setPartialHousehold}
-          />
+          <>
+            <PartialSummary partial={partialHousehold} />
+            <HouseholdWizard
+              onComplete={handleWizardComplete}
+              onPartialChange={setPartialHousehold}
+            />
+          </>
         )}
 
         {/* Household entered: show change wizard until results are ready */}
@@ -337,6 +340,83 @@ export default function Home() {
         <footer className="mt-10 text-xs text-gray-400">
           <span>Powered by <a href="https://policyengine.org" target="_blank" rel="noopener noreferrer" className="text-[#319795] font-medium">PolicyEngine</a></span>
         </footer>
+      </div>
+    </div>
+  );
+}
+
+function PartialSummary({ partial }: { partial: Partial<Household> }) {
+  const items: { label: string; value: string }[] = [];
+  if (partial.state) {
+    items.push({
+      label: 'Location',
+      value: `${partial.state}${partial.zipCode ? ' · ' + partial.zipCode : ''}`,
+    });
+  }
+  if (partial.filingStatus) {
+    const married =
+      partial.filingStatus === 'married_jointly' || partial.filingStatus === 'married_separately';
+    items.push({ label: 'Status', value: married ? 'Married' : 'Single' });
+  }
+  if (partial.age && partial.age > 0) {
+    const married =
+      partial.filingStatus === 'married_jointly' || partial.filingStatus === 'married_separately';
+    items.push({
+      label: 'Age',
+      value:
+        married && partial.spouseAge
+          ? `${partial.age} & ${partial.spouseAge}`
+          : `${partial.age}`,
+    });
+  }
+  if (partial.income !== undefined && partial.income > 0) {
+    const married =
+      partial.filingStatus === 'married_jointly' || partial.filingStatus === 'married_separately';
+    const yours = `$${Math.round(partial.income / 12).toLocaleString()}/mo`;
+    const partner =
+      married && partial.spouseIncome !== undefined && partial.spouseIncome > 0
+        ? ` & $${Math.round(partial.spouseIncome / 12).toLocaleString()}/mo`
+        : '';
+    items.push({ label: 'Income', value: yours + partner });
+  }
+  if (partial.hasESI !== undefined || partial.spouseHasESI !== undefined) {
+    const married =
+      partial.filingStatus === 'married_jointly' || partial.filingStatus === 'married_separately';
+    let value: string;
+    if (!married) {
+      value = partial.hasESI ? 'Yes' : 'No';
+    } else if (partial.hasESI && partial.spouseHasESI) {
+      value = 'Both';
+    } else if (partial.hasESI) {
+      value = 'You only';
+    } else if (partial.spouseHasESI) {
+      value = 'Partner only';
+    } else {
+      value = 'Neither';
+    }
+    items.push({ label: 'Job coverage', value });
+  }
+  if (partial.childAges && partial.childAges.length > 0) {
+    items.push({
+      label: 'Children',
+      value: `${partial.childAges.length} (ages ${partial.childAges.join(', ')})`,
+    });
+  }
+
+  if (items.length === 0) return null;
+
+  return (
+    <div className="mb-4 bg-white border border-gray-200 rounded-xl px-4 py-3 shadow-sm">
+      <div className="text-[10px] font-semibold uppercase tracking-widest text-gray-400 mb-2">
+        So far
+      </div>
+      <div className="flex flex-wrap gap-x-4 gap-y-2">
+        {items.map((item) => (
+          <div key={item.label}>
+            <div className="text-[10px] uppercase tracking-wider text-gray-400">{item.label}</div>
+            <div className="text-sm font-semibold text-gray-900">{item.value}</div>
+          </div>
+        ))}
       </div>
     </div>
   );
