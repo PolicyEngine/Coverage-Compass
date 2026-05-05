@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import HouseholdWizard from '@/components/HouseholdWizard';
-import InputStrip from '@/components/InputStrip';
+import ChangeWizard from '@/components/ChangeWizard';
 import ResultsView from '@/components/ResultsView';
 import { Household, LifeEventType, SimulationResult, LIFE_EVENTS } from '@/types';
 
@@ -290,22 +290,6 @@ export default function Home() {
           )}
         </div>
 
-        {/* Preview strip during wizard — non-interactive */}
-        {!household && Object.keys(partialHousehold).length > 0 && (
-          <div className="pointer-events-none opacity-60 mb-4">
-            <InputStrip
-              household={{ state: 'CA', filingStatus: 'single', income: 0, spouseIncome: 0, spouseAge: 30, childAges: [], age: 30, hasESI: false, spouseHasESI: false, year: 2026, ...partialHousehold } as Household}
-              selectedEvent={null}
-              onEventSelect={() => {}}
-              eventParams={{}}
-              onParamsChange={() => {}}
-              onRun={() => {}}
-              isLoading={false}
-              canRun={false}
-            />
-          </div>
-        )}
-
         {/* Wizard (no household yet) */}
         {!household && (
           <HouseholdWizard
@@ -314,18 +298,15 @@ export default function Home() {
           />
         )}
 
-        {/* Household entered — show input strip */}
-        {household && (
-          <InputStrip
+        {/* Household entered — show change wizard until results are ready */}
+        {household && !isLoading && !result && (
+          <ChangeWizard
             household={household}
-            onEditHousehold={handleReset}
-            selectedEvent={selectedEvent}
-            onEventSelect={(e) => { setSelectedEvent(e); }}
-            eventParams={eventParams}
-            onParamsChange={setEventParams}
-            onRun={handleRun}
-            isLoading={isLoading}
-            canRun={selectedEvent !== null}
+            onApply={(event, params) => {
+              setSelectedEvent(event);
+              setEventParams(params);
+              runSimulation(household, event, params);
+            }}
           />
         )}
 
