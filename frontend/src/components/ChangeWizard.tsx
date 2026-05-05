@@ -27,8 +27,8 @@ function getAvailableEvents(h: Household): EventOption[] {
     },
     {
       type: 'moving_states',
-      label: 'Moving to a new state',
-      description: 'Compare coverage rules and premiums in a different state.',
+      label: 'Move',
+      description: 'Compare coverage rules and premiums in a different state or area.',
     },
   ];
 
@@ -156,7 +156,8 @@ export default function ChangeWizard({ household, onApply }: ChangeWizardProps) 
         };
       case 'moving_states':
         return {
-          newState,
+          // Stay in the same state if only the ZIP changes.
+          newState: newState || household.state,
           newZipCode: newZip || undefined,
         };
       case 'getting_married':
@@ -192,7 +193,9 @@ export default function ChangeWizard({ household, onApply }: ChangeWizardProps) 
         const sameSpouse = (parseInt(partnerIncomeMo) || 0) * 12 === household.spouseIncome;
         return !(sameYour && (!married || sameSpouse));
       case 'moving_states':
-        return newState !== '' && newState !== household.state;
+        // Allow same-state moves when only the ZIP changes (different area within the state).
+        return (newState !== '' && newState !== household.state) ||
+               (newZip !== '' && newZip !== household.zipCode);
       case 'getting_married':
         return spouseAge !== '' && parseInt(spouseAge) >= 18;
       case 'divorce':
@@ -207,12 +210,28 @@ export default function ChangeWizard({ household, onApply }: ChangeWizardProps) 
 
   const selectedLabel = events.find((e) => e.type === eventType)?.label ?? '';
 
+  // Display step number continues from the household wizard (steps 1-7).
+  const wizardStep = step === 1 ? 8 : 9;
+  const progressPercent = (wizardStep / 9) * 100;
+
   return (
-    <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm">
+    <div className="max-w-lg mx-auto">
+      <div className="mb-6">
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-sm font-medium text-gray-500">Step {wizardStep} of 9</span>
+        </div>
+        <div className="w-full h-2 bg-gray-200 rounded-full overflow-hidden">
+          <div
+            className="h-full bg-[#319795] rounded-full transition-all duration-300"
+            style={{ width: `${progressPercent}%` }}
+          />
+        </div>
+      </div>
+
+      <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm">
       {step === 1 && (
         <>
           <div className="mb-5">
-            <div className="text-[10px] font-semibold uppercase tracking-widest text-[#285E61] mb-1">Step 1 of 2</div>
             <h2 className="text-xl font-bold text-gray-900">What&apos;s changing?</h2>
             <p className="text-sm text-gray-500 mt-1">Pick the life event you want to model.</p>
           </div>
@@ -250,7 +269,6 @@ export default function ChangeWizard({ household, onApply }: ChangeWizardProps) 
           }}
         >
           <div className="mb-5">
-            <div className="text-[10px] font-semibold uppercase tracking-widest text-[#285E61] mb-1">Step 2 of 2</div>
             <h2 className="text-xl font-bold text-gray-900">{getStep2Heading(eventType)}</h2>
           </div>
 
@@ -273,14 +291,14 @@ export default function ChangeWizard({ household, onApply }: ChangeWizardProps) 
             {eventType === 'moving_states' && (
               <>
                 <div>
-                  <FieldLabel>New state</FieldLabel>
+                  <FieldLabel>New state (optional, keep same to move within state)</FieldLabel>
                   <select
                     value={newState}
                     onChange={(e) => setNewState(e.target.value)}
                     autoFocus
                     className={inputClass()}
                   >
-                    <option value="">Pick a state…</option>
+                    <option value="">Same state ({household.state})</option>
                     {US_STATES.filter((s) => s.code !== household.state).map((s) => (
                       <option key={s.code} value={s.code}>
                         {s.name}
@@ -479,6 +497,7 @@ export default function ChangeWizard({ household, onApply }: ChangeWizardProps) 
           </p>
         </form>
       )}
+      </div>
     </div>
   );
 }

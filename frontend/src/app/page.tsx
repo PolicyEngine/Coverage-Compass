@@ -216,7 +216,6 @@ export default function Home() {
               </p>
               <div className="flex gap-5 flex-wrap mt-4 pt-4 border-t border-gray-100 text-sm text-gray-500">
                 <span>Year: <b className="text-gray-900">{household.year}</b></span>
-                <span>Model: <b className="text-gray-900">PolicyEngine US</b></span>
                 <button onClick={handleShare} className="ml-auto text-[#319795] hover:text-[#285E61] font-medium flex items-center gap-1.5">
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
@@ -467,44 +466,52 @@ function ScenarioCard({ scenario, onClick, onRemove }: ScenarioCardProps) {
   );
 }
 
+// Build the hero headline strictly from observable transitions in the
+// simulation result so the copy can't contradict the table beneath it.
 function getHeroHeadline(eventType: LifeEventType, result: SimulationResult): string {
-  const anyMedicaidAfter = (result.healthcareAfter?.people ?? []).some(p => p.coverage === 'Medicaid');
-  const anyMedicaidBefore = (result.healthcareBefore?.people ?? []).some(p => p.coverage === 'Medicaid');
-  const metrics = result.before.metrics ?? [];
-  const ptcAfter = metrics.find(m => m.name === 'premium_tax_credit')?.after ?? 0;
-  const ptcBefore = metrics.find(m => m.name === 'premium_tax_credit')?.before ?? 0;
-  const netChangeMo = result.diff.netIncome / 12;
+  const beforePeople = result.healthcareBefore?.people ?? [];
+  const afterPeople = result.healthcareAfter?.people ?? [];
+  const head = (label: string) => label === 'You';
 
-  switch (eventType) {
-    case 'losing_esi':
-      if (anyMedicaidAfter) return 'Losing job coverage qualifies you for Medicaid.';
-      if (ptcAfter > 0) return 'Losing job coverage makes you eligible for ACA marketplace subsidies.';
-      return 'Losing job coverage opens a marketplace enrollment window.';
-    case 'having_baby':
-      if (anyMedicaidAfter && !anyMedicaidBefore) return 'Being pregnant triggers Medicaid eligibility.';
-      if (anyMedicaidAfter) return 'Pregnancy strengthens your Medicaid eligibility.';
-      return 'Being pregnant shifts your household eligibility thresholds.';
-    case 'getting_married':
-      if (ptcBefore > 0 && ptcAfter === 0) return 'Getting married pushes you over the ACA subsidy cliff.';
-      if (anyMedicaidAfter && !anyMedicaidBefore) return 'Getting married qualifies your household for Medicaid.';
-      if (netChangeMo > 100) return 'Getting married improves your household\'s net financial picture.';
-      return 'Getting married changes your coverage and eligibility picture.';
-    case 'divorce':
-      if (anyMedicaidAfter && !anyMedicaidBefore) return 'Separating qualifies you for Medicaid as a single filer.';
-      if (ptcAfter > 0 && ptcBefore === 0) return 'Separating makes you eligible for ACA marketplace subsidies.';
-      return 'Separating changes your coverage options as a single filer.';
-    case 'moving_states':
-      if (anyMedicaidAfter && !anyMedicaidBefore) return 'Your new state\'s Medicaid rules cover your income.';
-      if (!anyMedicaidAfter && anyMedicaidBefore) return 'Your new state has stricter Medicaid rules.';
-      return 'Moving states changes which programs and premiums apply.';
-    case 'changing_income':
-      if (anyMedicaidAfter && !anyMedicaidBefore) return 'Your new income qualifies you for Medicaid.';
-      if (!anyMedicaidAfter && anyMedicaidBefore) return 'Your new income moves you out of Medicaid.';
-      if (ptcBefore > 0 && ptcAfter === 0) return 'Your new income crosses the ACA subsidy threshold.';
-      return 'Your new income shifts your coverage and eligibility.';
-    case 'ending_pregnancy':
-      if (anyMedicaidBefore && !anyMedicaidAfter) return 'Ending pregnancy ends your Medicaid pregnancy coverage.';
-      if (ptcAfter > 0) return 'After pregnancy, ACA marketplace coverage applies.';
-      return 'Coverage shifts once pregnancy ends.';
-  }
+  // Per-person transitions for the head of household.
+  const headBefore = beforePeople.find((p) => head(p.label))?.coverage ?? null;
+  const headAfter = afterPeople.find((p) => head(p.label))?.coverage ?? null;
+
+  // Household-level transitions (any person).
+  const anyMedicaidBefore = beforePeople.some((p) => p.coverage === 'Medicaid');
+  const anyMedicaidAfter = afterPeople.some((p) => p.coverage === 'Medicaid');
+  const anyMarketplaceBefore = beforePeople.some((p) => p.coverage === 'Marketplace');
+  const anyMarketplaceAfter = afterPeople.some((p) => p.coverage === 'Marketplace');
+
+  // Metric-level transitions.
+  const metrics = result.before.metrics ?? [];
+  const ptcAfter = metrics.find((m) => m.name === 'premium_tax_credit')?.after ?? 0;
+  const ptcBefore = metrics.find((m) => m.name === 'premium_tax_credit')?.before ?? 0;
+  const lostPTC = ptcBefore > 0 && ptcAfter === 0;
+  const gainedPTC = ptcAfter > 0 && ptcBefore === 0;
+
+  // Verb describing the event in present tense.
+  const verbs: Record<LifeEventType, string> = {
+    losing_esi: 'Losing job-based coverage',
+    having_baby: 'Pregnancy',
+    ending_pregnancy: 'Ending pregnancy',
+    getting_married: 'Getting married',
+    divorce: 'Divorce',
+    moving_states: 'Moving',
+    changing_income: 'Your new income',
+  };
+  const subject = verbs[eventType];
+
+  // Salient transition takes priority over generic copy.
+  if (!anyMedicaidBefore && anyMedicaidAfter) return `${subject} qualifies you for Medicaid.`;
+  if (anyMedicaidBefore && !anyMedicaidAfter) return `${subject} moves you out of Medicaid.`;
+  if (lostPTC) return `${subject} ends your ACA tax credit.`;
+  if (gainedPTC) return `${subject} qualifies you for an ACA tax credit.`;
+  if (headBefore === 'ESI' && headAfter !== 'ESI') return `${subject} ends your employer health insurance.`;
+  if (headBefore !== 'ESI' && headAfter === 'ESI') return `${subject} starts employer health insurance.`;
+  if (!anyMarketplaceBefore && anyMarketplaceAfter) return `${subject} moves you onto the ACA marketplace.`;
+  if (anyMarketplaceBefore && !anyMarketplaceAfter) return `${subject} moves you off the ACA marketplace.`;
+
+  // Fallback when no salient transition: describe the change without overpromising.
+  return `${subject} changes your coverage picture.`;
 }

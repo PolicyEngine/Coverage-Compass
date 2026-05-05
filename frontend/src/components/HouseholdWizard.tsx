@@ -12,6 +12,10 @@ interface HouseholdWizardProps {
 type FilingStatus = Household['filingStatus'];
 
 const TOTAL_STEPS = 7;
+// The change-wizard adds 2 more steps after household entry (event picker,
+// event details). Display the household steps as part of the same 9-step
+// flow so the user sees a continuous progress bar.
+const TOTAL_STEPS_INCLUDING_CHANGE = 9;
 
 function isMarriedStatus(status: FilingStatus): boolean {
   return status === 'married_jointly' || status === 'married_separately';
@@ -167,7 +171,7 @@ export default function HouseholdWizard({ onComplete, onBack, onPartialChange }:
     onComplete(household);
   }
 
-  const progressPercent = (step / TOTAL_STEPS) * 100;
+  const progressPercent = (step / TOTAL_STEPS_INCLUDING_CHANGE) * 100;
 
   const step1Valid = zip.length === 5 && detectedState !== null;
   const step3Valid = age !== '' && parseInt(age, 10) >= 18 && (!married || (partnerAge !== '' && parseInt(partnerAge, 10) >= 18));
@@ -177,7 +181,7 @@ export default function HouseholdWizard({ onComplete, onBack, onPartialChange }:
     <div className="max-w-lg mx-auto">
       <div className="mb-6">
         <div className="flex items-center justify-between mb-2">
-          <span className="text-sm font-medium text-gray-500">Step {step} of {TOTAL_STEPS}</span>
+          <span className="text-sm font-medium text-gray-500">Step {step} of {TOTAL_STEPS_INCLUDING_CHANGE}</span>
         </div>
         <div className="w-full h-2 bg-gray-200 rounded-full overflow-hidden">
           <div

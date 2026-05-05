@@ -351,7 +351,10 @@ export default function ResultsView({ result, eventType, onTryAnother, onReset }
       }
       return m;
     })
-    .filter((m) => m.before !== 0 || m.after !== 0);
+    // Always keep the marketplace-premium row when ACA is in play, even if the
+    // tier-aware net is $0 in both columns (otherwise the inline tier toggle
+    // would vanish along with the row when bronze fully zeros out under PTC).
+    .filter((m) => (m.name === 'marketplace_net_premium' && showAcaPlans) || m.before !== 0 || m.after !== 0);
 
   return (
     <div className="space-y-4">
@@ -361,7 +364,7 @@ export default function ResultsView({ result, eventType, onTryAnother, onReset }
           <div className="flex items-baseline gap-3 sm:gap-6 flex-col sm:flex-row sm:flex-wrap">
             <div>
               <div className="text-[10px] font-semibold uppercase tracking-widest text-gray-400 mb-1">
-                Net change in marketplace cost
+                Change in premium cost
               </div>
               <div className={`text-3xl sm:text-4xl font-bold tabular-nums ${heroTone}`}>
                 {heroSign}{heroAmount}
@@ -369,9 +372,9 @@ export default function ResultsView({ result, eventType, onTryAnother, onReset }
               </div>
             </div>
             <p className="text-sm text-gray-500 leading-relaxed flex-1 sm:min-w-[260px] max-w-prose">
-              Your household&apos;s ACA marketplace premium changes from{' '}
+              Your monthly premium changes from{' '}
               <b className="text-gray-700 tabular-nums">{formatCurrency(netBefore)}</b> to{' '}
-              <b className="text-gray-700 tabular-nums">{formatCurrency(netAfter)}</b>/mo, after applying any tax credits.
+              <b className="text-gray-700 tabular-nums">{formatCurrency(netAfter)}</b>, after applying any tax credits.
             </p>
           </div>
         </div>

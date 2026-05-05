@@ -15,11 +15,11 @@ from .household import Household, Person
 
 
 # Healthcare-only variable list. The app surfaces healthcare coverage and
-# ACA premium data — no taxes, food, housing, or non-healthcare credits.
-# Keeping the list tight lets PolicyEngine prune the dependency graph for
-# unrelated programs and makes simulations meaningfully faster.
+# ACA premium data; no taxes, food, housing, or non-healthcare credits.
+# Premium tax credit still pulls AGI and a few tax dependencies through
+# PolicyEngine's graph, but household_net_income (which would chase every
+# benefit and credit) is intentionally absent.
 OUTPUT_VARIABLES = [
-    "household_net_income",      # diff.netIncome in the response
     "medicaid",                  # per-person benefit (drives coverage pill)
     "chip",                      # per-person benefit (drives coverage pill)
     "premium_tax_credit",        # ACA tax credit (annual)
