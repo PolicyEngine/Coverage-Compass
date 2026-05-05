@@ -65,30 +65,41 @@ export default function HouseholdWizard({ onComplete, onBack, onPartialChange }:
     }
   }
 
+  function buildPartial(overrides: Partial<Household> = {}): Partial<Household> {
+    const partial: Partial<Household> = { year: 2026 };
+    if (detectedState) partial.state = detectedState;
+    if (zip) partial.zipCode = zip;
+    if (filingTouched) partial.filingStatus = filingStatus;
+    const myAge = parseInt(age, 10);
+    if (!isNaN(myAge) && myAge > 0) partial.age = myAge;
+    const myPartnerAge = parseInt(partnerAge, 10);
+    if (!isNaN(myPartnerAge) && myPartnerAge > 0) partial.spouseAge = myPartnerAge;
+    const myIncome = parseFloat(monthlyIncome.replace(/,/g, ''));
+    if (!isNaN(myIncome) && myIncome > 0) partial.income = myIncome * 12;
+    const myPartnerIncome = parseFloat(partnerMonthlyIncome.replace(/,/g, ''));
+    if (!isNaN(myPartnerIncome) && myPartnerIncome > 0) partial.spouseIncome = myPartnerIncome * 12;
+    if (esiTouched) {
+      partial.hasESI = hasESI;
+      partial.spouseHasESI = spouseHasESI;
+    }
+    const enteredChildAges = childAges.map(Number).filter((n) => !isNaN(n));
+    if (enteredChildAges.length > 0) partial.childAges = enteredChildAges;
+    return { ...partial, ...overrides };
+  }
+
   function goNext() {
     const next = step + 1;
     setStep(next);
-    // Emit partial household for live preview
-    onPartialChange?.({
-      state: detectedState ?? undefined,
-      zipCode: zip || undefined,
-      filingStatus,
-      age: parseInt(age) || undefined,
-      spouseAge: parseInt(partnerAge) || parseInt(age) || undefined,
-      income: (parseFloat(monthlyIncome.replace(/,/g, '')) || 0) * 12,
-      spouseIncome: (parseFloat(partnerMonthlyIncome.replace(/,/g, '')) || 0) * 12,
-      hasESI,
-      spouseHasESI,
-      childAges: childAges.map(Number).filter((n) => !isNaN(n)),
-      year: 2026,
-    });
+    onPartialChange?.(buildPartial());
   }
 
   function selectFilingStatus(status: FilingStatus) {
     setFilingStatus(status);
     setFilingTouched(true);
     setStep(3);
-    onPartialChange?.({ filingStatus: status, state: detectedState ?? undefined, zipCode: zip || undefined, year: 2026 });
+    // Pass overrides because the React state setters above are async and our
+    // buildPartial() reads stale state on this render.
+    onPartialChange?.(buildPartial({ filingStatus: status }));
   }
 
   function selectESI(selfESI: boolean, partnerESI: boolean) {
@@ -96,14 +107,7 @@ export default function HouseholdWizard({ onComplete, onBack, onPartialChange }:
     setSpouseHasESI(partnerESI);
     setEsiTouched(true);
     setStep(6);
-    onPartialChange?.({
-      state: detectedState ?? undefined, zipCode: zip || undefined,
-      filingStatus, age: parseInt(age) || undefined,
-      spouseAge: parseInt(partnerAge) || parseInt(age) || undefined,
-      income: (parseFloat(monthlyIncome.replace(/,/g, '')) || 0) * 12,
-      spouseIncome: (parseFloat(partnerMonthlyIncome.replace(/,/g, '')) || 0) * 12,
-      hasESI: selfESI, spouseHasESI: partnerESI, year: 2026,
-    });
+    onPartialChange?.(buildPartial({ hasESI: selfESI, spouseHasESI: partnerESI }));
   }
 
   function addChild() {
