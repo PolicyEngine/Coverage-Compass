@@ -52,7 +52,12 @@ function formatMonthly(annual: number): string {
   return formatCurrency(annual / 12);
 }
 
+// Anything that isn't ESI/Medicaid/CHIP/Marketplace is treated as a Basic
+// Health Program brand (NY Essential Plan, MinnesotaCare, OHP Bridge, Healthy DC).
+const STANDARD_COVERAGE = new Set(['ESI', 'Marketplace', 'Medicaid', 'CHIP']);
+
 function getCoverageLabel(type: string | null): string {
+  if (type === null || type === undefined) return 'No coverage';
   switch (type) {
     case 'ESI':
       return 'Employer-sponsored';
@@ -63,7 +68,7 @@ function getCoverageLabel(type: string | null): string {
     case 'CHIP':
       return 'CHIP';
     default:
-      return 'No coverage';
+      return type; // BHP brand name, passed through as-is
   }
 }
 
@@ -77,6 +82,8 @@ const COVERAGE_TONES: Record<string, string> = {
   CHIP: 'bg-pink-50 text-pink-800 border-pink-200',
 };
 
+const BHP_TONE = 'bg-emerald-50 text-emerald-800 border-emerald-200';
+
 function CoveragePill({ type, exists }: { type: string | null; exists: boolean }) {
   if (!exists) {
     return <span className="text-sm text-gray-300">Not applicable</span>;
@@ -84,6 +91,8 @@ function CoveragePill({ type, exists }: { type: string | null; exists: boolean }
   const label = getCoverageLabel(type);
   const tone = type && COVERAGE_TONES[type]
     ? COVERAGE_TONES[type]
+    : type && !STANDARD_COVERAGE.has(type)
+    ? BHP_TONE
     : 'bg-gray-50 text-gray-500 border-gray-200';
   return (
     <span className={`inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium border ${tone}`}>
@@ -122,16 +131,25 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
 
 // Render a signed monthly delta. Cost metrics (premium): negative delta = green.
 // Credit/benefit metrics: positive delta = green. Zero = gray.
-function ChangeCell({ kind, monthlyDelta }: { kind: ChipKind; monthlyDelta: number }) {
+function ChangeCell({
+  kind,
+  monthlyDelta,
+  highlight = false,
+}: {
+  kind: ChipKind;
+  monthlyDelta: number;
+  highlight?: boolean;
+}) {
+  const sizeClass = highlight ? 'text-base font-bold' : 'text-sm font-semibold';
   if (Math.abs(monthlyDelta) < 0.5) {
-    return <span className="text-sm text-gray-300">No change</span>;
+    return <span className={`${highlight ? 'text-base' : 'text-sm'} text-gray-300`}>No change</span>;
   }
   const isCost = kind === 'cost';
   const favorable = isCost ? monthlyDelta < 0 : monthlyDelta > 0;
   const sign = monthlyDelta > 0 ? '+' : '−';
   const tone = favorable ? 'text-green-600' : 'text-red-600';
   return (
-    <span className={`text-sm font-semibold tabular-nums ${tone}`}>
+    <span className={`${sizeClass} tabular-nums ${tone}`}>
       {sign}{formatCurrency(Math.abs(monthlyDelta))}/mo
     </span>
   );
@@ -197,11 +215,13 @@ function MetricRow({
   showTierToggle = false,
   selectedTier,
   onTierChange,
+  highlight = false,
 }: {
   metric: BenefitMetric;
   showTierToggle?: boolean;
   selectedTier?: Tier;
   onTierChange?: (t: Tier) => void;
+  highlight?: boolean;
 }) {
   const category = METRIC_CATEGORY[metric.name] ?? metric.category.replace('_', ' ');
   const chipKind = METRIC_CHIP_KIND[metric.name] ?? 'cost';
@@ -209,23 +229,36 @@ function MetricRow({
   const monthlyAfter = metric.after / 12;
   const monthlyDelta = monthlyAfter - monthlyBefore;
 
+  // The "Total monthly cost" row gets a thicker top border, bold label,
+  // and larger numbers so it visually reads as the bottom line.
+  const rowClass = highlight
+    ? 'border-t-2 border-gray-300 bg-gray-50/60'
+    : 'border-t border-gray-100';
+  const labelClass = highlight ? 'text-base font-bold text-gray-900' : 'text-sm font-medium text-gray-900';
+  const beforeClass = highlight
+    ? 'px-5 py-3 align-middle text-base font-semibold tabular-nums text-gray-700'
+    : 'px-5 py-3 align-middle text-sm tabular-nums text-gray-500';
+  const afterClass = highlight
+    ? 'px-5 py-3 align-middle text-base font-semibold tabular-nums text-gray-900'
+    : 'px-5 py-3 align-middle text-sm tabular-nums text-gray-700';
+
   return (
-    <tr className="border-t border-gray-100">
+    <tr className={rowClass}>
       <td className="px-5 py-3 align-middle">
-        <div className="text-sm font-medium text-gray-900">{metric.label}</div>
+        <div className={labelClass}>{metric.label}</div>
         <div className="text-[11px] text-gray-400">{category}</div>
         {showTierToggle && selectedTier && onTierChange && (
           <TierToggle selected={selectedTier} onChange={onTierChange} />
         )}
       </td>
-      <td className="px-5 py-3 align-middle text-sm tabular-nums text-gray-500">
+      <td className={beforeClass}>
         {`${formatCurrency(monthlyBefore)}/mo`}
       </td>
-      <td className="px-5 py-3 align-middle text-sm tabular-nums text-gray-700">
+      <td className={afterClass}>
         {`${formatCurrency(monthlyAfter)}/mo`}
       </td>
       <td className="px-5 py-3 align-middle">
-        <ChangeCell kind={chipKind} monthlyDelta={monthlyDelta} />
+        <ChangeCell kind={chipKind} monthlyDelta={monthlyDelta} highlight={highlight} />
       </td>
     </tr>
   );
@@ -266,11 +299,13 @@ function MobileMetricCard({
   showTierToggle = false,
   selectedTier,
   onTierChange,
+  highlight = false,
 }: {
   metric: BenefitMetric;
   showTierToggle?: boolean;
   selectedTier?: Tier;
   onTierChange?: (t: Tier) => void;
+  highlight?: boolean;
 }) {
   const category = METRIC_CATEGORY[metric.name] ?? metric.category.replace('_', ' ');
   const chipKind = METRIC_CHIP_KIND[metric.name] ?? 'cost';
@@ -278,11 +313,19 @@ function MobileMetricCard({
   const monthlyAfter = metric.after / 12;
   const monthlyDelta = monthlyAfter - monthlyBefore;
 
+  const wrapperClass = highlight
+    ? 'border-2 border-gray-300 rounded-lg p-3 bg-white'
+    : 'border border-gray-100 rounded-lg p-3 bg-gray-50/40';
+  const labelClass = highlight ? 'text-base font-bold text-gray-900' : 'text-sm font-medium text-gray-900';
+  const valueClass = highlight
+    ? 'text-base font-bold tabular-nums text-gray-900'
+    : 'text-sm tabular-nums text-gray-700';
+
   return (
-    <div className="border border-gray-100 rounded-lg p-3 bg-gray-50/40">
+    <div className={wrapperClass}>
       <div className="flex items-baseline justify-between gap-2 mb-2 flex-wrap">
         <div>
-          <div className="text-sm font-medium text-gray-900">{metric.label}</div>
+          <div className={labelClass}>{metric.label}</div>
           <div className="text-[11px] text-gray-400">{category}</div>
           {showTierToggle && selectedTier && onTierChange && (
             <TierToggle selected={selectedTier} onChange={onTierChange} />
@@ -293,13 +336,13 @@ function MobileMetricCard({
       <div className="grid grid-cols-2 gap-3 text-xs">
         <div>
           <div className="text-[10px] text-gray-400 uppercase tracking-wider mb-1">Before</div>
-          <div className="text-sm tabular-nums text-gray-700">
+          <div className={valueClass}>
             {`${formatCurrency(monthlyBefore)}/mo`}
           </div>
         </div>
         <div>
           <div className="text-[10px] text-gray-400 uppercase tracking-wider mb-1">After</div>
-          <div className="text-sm tabular-nums text-gray-700">
+          <div className={valueClass}>
             {`${formatCurrency(monthlyAfter)}/mo`}
           </div>
         </div>
@@ -533,6 +576,7 @@ export default function ResultsView({ result, eventType, onTryAnother, onReset }
                     showTierToggle={m.name === 'full_premium' && (acaScope?.bronzeGross ?? 0) > 0}
                     selectedTier={selectedTier}
                     onTierChange={setSelectedTier}
+                    highlight={m.name === 'total_monthly_cost'}
                   />
                 ))}
               </>
@@ -578,6 +622,7 @@ export default function ResultsView({ result, eventType, onTryAnother, onReset }
                   showTierToggle={m.name === 'full_premium' && (acaScope?.bronzeGross ?? 0) > 0}
                   selectedTier={selectedTier}
                   onTierChange={setSelectedTier}
+                  highlight={m.name === 'total_monthly_cost'}
                 />
               ))}
             </div>

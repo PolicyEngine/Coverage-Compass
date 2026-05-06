@@ -101,7 +101,10 @@ export interface BenefitMetric {
 export interface PersonHealthcare {
   index: number;
   label: string; // "You", "Spouse", "Child 1", etc.
-  coverage: 'ESI' | 'Medicaid' | 'CHIP' | 'Marketplace' | null;
+  // Coverage label. Standard slugs (ESI/Medicaid/CHIP/Marketplace) are stable,
+  // but Basic Health Program states return a state-specific brand
+  // (e.g. "Essential Plan", "MinnesotaCare"), so we accept any string.
+  coverage: 'ESI' | 'Medicaid' | 'CHIP' | 'Marketplace' | string | null;
 }
 
 export interface HealthcareCoverage {

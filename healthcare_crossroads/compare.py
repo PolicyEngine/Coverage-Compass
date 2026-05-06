@@ -29,6 +29,17 @@ OUTPUT_VARIABLES = [
 ]
 
 
+# State-specific labels for the federal Basic Health Program (42 USC 18051).
+# PolicyEngine models all four under the same `is_basic_health_program_eligible`
+# variable; the user-facing brand differs by state.
+BHP_STATE_LABEL = {
+    "NY": "Essential Plan",
+    "MN": "MinnesotaCare",
+    "OR": "OHP Bridge",
+    "DC": "Healthy DC",
+}
+
+
 @dataclass
 class PersonHealthcare:
     """Healthcare coverage info for a single person."""
@@ -39,6 +50,8 @@ class PersonHealthcare:
     chip: bool = False
     marketplace: bool = False  # ACA marketplace (inferred from PTC)
     esi: bool = False  # Employer-sponsored insurance
+    bhp: bool = False  # Basic Health Program (NY Essential Plan, MinnesotaCare, etc.)
+    bhp_label: str | None = None  # State-specific BHP brand name
 
     @property
     def coverage_type(self) -> str | None:
@@ -49,6 +62,8 @@ class PersonHealthcare:
             return "Medicaid"
         if self.chip:
             return "CHIP"
+        if self.bhp:
+            return self.bhp_label or "Basic Health Program"
         if self.marketplace:
             return "Marketplace"
         return None
@@ -63,22 +78,13 @@ class HealthcareCoverage:
 
     def get_coverage_summary(self) -> dict[str, list[str]]:
         """Return dict mapping coverage type to list of person labels."""
-        summary: dict[str, list[str]] = {
-            "ESI": [],
-            "Medicaid": [],
-            "CHIP": [],
-            "Marketplace": [],
-        }
+        summary: dict[str, list[str]] = {}
         for p in self.people:
-            if p.esi:
-                summary["ESI"].append(p.label)
-            elif p.medicaid:
-                summary["Medicaid"].append(p.label)
-            elif p.chip:
-                summary["CHIP"].append(p.label)
-            elif p.marketplace:
-                summary["Marketplace"].append(p.label)
-        return {k: v for k, v in summary.items() if v}
+            key = p.coverage_type
+            if key is None:
+                continue
+            summary.setdefault(key, []).append(p.label)
+        return summary
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to JSON-serializable dictionary."""
@@ -344,6 +350,16 @@ def _extract_healthcare_coverage(
     except Exception:
         chip_values = [0.0] * num_people
 
+    # Per-person Basic Health Program enrollment (NY Essential Plan,
+    # MinnesotaCare, OHP Bridge, Healthy DC). PolicyEngine returns False
+    # outside the four BHP states, so this is safe to read unconditionally.
+    try:
+        bhp_values = sim.calculate("basic_health_program_enrolled", year)
+    except Exception:
+        bhp_values = [False] * num_people
+
+    bhp_label = BHP_STATE_LABEL.get(household.state)
+
     # Get household-level PTC
     try:
         ptc_value = float(sum(sim.calculate("premium_tax_credit", year)))
@@ -358,14 +374,18 @@ def _extract_healthcare_coverage(
         member = household.members[i]
         medicaid_amount = float(medicaid_values[i]) if i < len(medicaid_values) else 0.0
         chip_amount = float(chip_values[i]) if i < len(chip_values) else 0.0
+        on_bhp_raw = bool(bhp_values[i]) if i < len(bhp_values) else False
 
         # Check ESI first (from household member data)
         has_esi = member.has_esi
 
         on_medicaid = medicaid_amount > 0 and not has_esi
         on_chip = chip_amount > 0 and not has_esi
-        # If not on ESI/Medicaid/CHIP but household has PTC, person is on marketplace
-        on_marketplace = has_ptc and not has_esi and not on_medicaid and not on_chip
+        on_bhp = on_bhp_raw and not has_esi and not on_medicaid and not on_chip
+        # BHP replaces marketplace for eligible adults — don't double-assign.
+        on_marketplace = (
+            has_ptc and not has_esi and not on_medicaid and not on_chip and not on_bhp
+        )
 
         people.append(PersonHealthcare(
             person_index=i,
@@ -374,6 +394,8 @@ def _extract_healthcare_coverage(
             medicaid=on_medicaid,
             chip=on_chip,
             marketplace=on_marketplace,
+            bhp=on_bhp,
+            bhp_label=bhp_label if on_bhp else None,
         ))
 
     return HealthcareCoverage(people=people, has_ptc=has_ptc)
@@ -425,6 +447,8 @@ def _extract_counterfactual_before_coverage(
                 chip=person.chip,
                 marketplace=person.marketplace,
                 esi=person.esi,
+                bhp=person.bhp,
+                bhp_label=person.bhp_label,
             )
         )
 
@@ -507,6 +531,8 @@ def _extract_counterfactual_after_coverage(
                 chip=person.chip,
                 marketplace=person.marketplace,
                 esi=person.esi,
+                bhp=person.bhp,
+                bhp_label=person.bhp_label,
             )
         )
 
