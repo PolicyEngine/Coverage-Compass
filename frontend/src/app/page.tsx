@@ -214,12 +214,33 @@ export default function Home() {
                   : `Single · age ${household.age}`} ·{' '}
                 ${Math.round(household.income / 12).toLocaleString()}/mo income
               </p>
-              {describeScenario(selectedEvent, eventParams, household) && (
-                <p className="mt-2 text-sm text-gray-700">
-                  <span className="text-[10px] font-semibold uppercase tracking-widest text-gray-400 mr-2">What changed</span>
-                  {describeScenario(selectedEvent, eventParams, household)}
-                </p>
-              )}
+              {(() => {
+                const changes = describeScenarioChanges(selectedEvent, eventParams, household);
+                if (changes.length === 0) return null;
+                return (
+                  <div className="mt-3 pt-3 border-t border-gray-100">
+                    <div className="text-[10px] font-semibold uppercase tracking-widest text-gray-400 mb-2">
+                      What changed
+                    </div>
+                    <div className="flex flex-wrap gap-x-5 gap-y-2">
+                      {changes.map((c, i) => (
+                        <div key={i} className="flex items-baseline gap-2 text-sm">
+                          <span className="text-gray-500">{c.label}</span>
+                          {c.before !== undefined && c.after !== undefined ? (
+                            <>
+                              <span className="text-gray-400 line-through tabular-nums">{c.before}</span>
+                              <span className="text-gray-300">→</span>
+                              <span className="font-semibold text-gray-900 tabular-nums">{c.after}</span>
+                            </>
+                          ) : (
+                            <span className="font-semibold text-gray-900">{c.text}</span>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
               <div className="flex gap-5 flex-wrap mt-4 pt-4 border-t border-gray-100 text-sm text-gray-500">
                 <span>Year: <b className="text-gray-900">{household.year}</b></span>
                 <button onClick={handleShare} className="ml-auto text-[#319795] hover:text-[#285E61] font-medium flex items-center gap-1.5">
@@ -471,64 +492,94 @@ function ScenarioCard({ scenario, onClick, onRemove }: ScenarioCardProps) {
   );
 }
 
-// One-liner describing what the user actually entered for the scenario
-// (so the result page reflects "what changed", not just the original
-// household state).
-function describeScenario(
+// Structured "what changed" entries for the result hero. Each entry has a
+// label and either a before/after pair (for diffs) or a single text value
+// (for events like pregnancy that don't have a numeric delta). Skips fields
+// the user didn't actually change, so partner $0/mo → $0/mo never appears.
+interface ScenarioChange {
+  label: string;
+  before?: string;
+  after?: string;
+  text?: string;
+}
+
+function describeScenarioChanges(
   eventType: LifeEventType,
   params: Record<string, unknown>,
   household: Household,
-): string | null {
+): ScenarioChange[] {
   const fmt = (annual: number) => `$${Math.round(annual / 12).toLocaleString()}/mo`;
   const married =
     household.filingStatus === 'married_jointly' || household.filingStatus === 'married_separately';
+  const out: ScenarioChange[] = [];
 
   switch (eventType) {
     case 'changing_income': {
       const newIncome = (params.newIncome as number) ?? household.income;
       const newSpouseIncome = (params.newSpouseIncome as number) ?? household.spouseIncome;
-      const yourPart = `${fmt(household.income)} → ${fmt(newIncome)}`;
-      if (married) {
-        return `Income ${yourPart}; partner ${fmt(household.spouseIncome)} → ${fmt(newSpouseIncome)}`;
+      if (newIncome !== household.income) {
+        out.push({ label: 'Your income', before: fmt(household.income), after: fmt(newIncome) });
       }
-      return `Income ${yourPart}`;
+      if (married && newSpouseIncome !== household.spouseIncome) {
+        out.push({
+          label: "Partner's income",
+          before: fmt(household.spouseIncome),
+          after: fmt(newSpouseIncome),
+        });
+      }
+      return out;
     }
     case 'moving_states': {
       const newState = (params.newState as string) ?? household.state;
       const newZip = (params.newZipCode as string) ?? '';
       const before = `${household.state}${household.zipCode ? ' · ' + household.zipCode : ''}`;
       const after = `${newState}${newZip ? ' · ' + newZip : ''}`;
-      return `Location ${before} → ${after}`;
+      if (before !== after) {
+        out.push({ label: 'Location', before, after });
+      }
+      return out;
     }
     case 'getting_married': {
       const spouseAge = params.spouseAge as number | undefined;
       const spouseIncome = params.spouseIncome as number | undefined;
       const spouseChildAges = (params.spouseChildAges as number[] | undefined) ?? [];
-      const parts = [];
+      const parts: string[] = [];
       if (spouseAge) parts.push(`age ${spouseAge}`);
-      if (spouseIncome !== undefined) parts.push(`${fmt(spouseIncome)} income`);
-      if (spouseChildAges.length > 0) parts.push(`${spouseChildAges.length} child${spouseChildAges.length > 1 ? 'ren' : ''}`);
-      return parts.length > 0 ? `Adding partner: ${parts.join(', ')}` : 'Adding a partner';
+      if (spouseIncome !== undefined && spouseIncome > 0) parts.push(`${fmt(spouseIncome)} income`);
+      if (spouseChildAges.length > 0) {
+        parts.push(`${spouseChildAges.length} child${spouseChildAges.length > 1 ? 'ren' : ''}`);
+      }
+      out.push({ label: 'Adding partner', text: parts.length > 0 ? parts.join(', ') : 'New spouse' });
+      return out;
     }
     case 'divorce': {
       const childrenKeeping = params.childrenKeeping as number | undefined;
       if (household.childAges.length > 0 && childrenKeeping !== undefined) {
         const leaving = household.childAges.length - childrenKeeping;
-        return `Separating, keeping ${childrenKeeping} of ${household.childAges.length} child${household.childAges.length > 1 ? 'ren' : ''}${leaving > 0 ? ` (${leaving} with partner)` : ''}`;
+        out.push({
+          label: 'Children',
+          text: `${childrenKeeping} of ${household.childAges.length} stay with you${leaving > 0 ? `, ${leaving} with partner` : ''}`,
+        });
       }
-      return 'Separating from partner';
+      out.push({ label: 'Separating', text: 'from partner' });
+      return out;
     }
     case 'losing_esi':
-      return 'Job-based coverage ending';
+      out.push({ label: 'Job-based coverage', text: 'ending' });
+      return out;
     case 'having_baby': {
       const idx = (params.pregnantMemberIndex as number) ?? 0;
-      if (married) return idx === 1 ? 'Partner becomes pregnant' : 'You become pregnant';
-      return 'You become pregnant';
+      out.push({
+        label: 'Pregnancy',
+        text: married && idx === 1 ? 'partner is pregnant' : 'you are pregnant',
+      });
+      return out;
     }
     case 'ending_pregnancy':
-      return 'Pregnancy ends';
+      out.push({ label: 'Pregnancy', text: 'ending' });
+      return out;
     default:
-      return null;
+      return out;
   }
 }
 

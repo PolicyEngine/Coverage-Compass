@@ -27,6 +27,7 @@ const METRIC_CATEGORY: Record<string, string> = {
   premium_tax_credit: 'tax credit',
   marketplace_net_premium: 'net cost',
   chip_premium: 'enrollment fee',
+  total_monthly_cost: 'sum of above',
 };
 
 // Each metric's diff-chip kind (drives the chip color + suffix word).
@@ -36,6 +37,7 @@ const METRIC_CHIP_KIND: Record<string, ChipKind> = {
   premium_tax_credit: 'credit',
   marketplace_net_premium: 'cost',
   chip_premium: 'cost',
+  total_monthly_cost: 'cost',
 };
 
 function formatCurrency(value: number): string {
@@ -340,12 +342,17 @@ export default function ResultsView({ result, eventType, onTryAnother, onReset }
     return selectedTier === 'bronze' ? aca.bronzeNet : aca.silverNet;
   };
 
-  // Hero metric: monthly net premium cost for the selected tier (after applying tax credits).
+  // Hero metric: monthly out-of-pocket the household pays. Sum of the
+  // tier-aware ACA marketplace cost (after PTC) and any CHIP enrollment fee.
   const netPremiumMetric = metrics.find((m) => m.name === 'marketplace_net_premium');
   const tierNetBefore = showAcaPlans ? tierNetPremium('before') : (netPremiumMetric?.before ?? 0);
   const tierNetAfter = showAcaPlans ? tierNetPremium('after') : (netPremiumMetric?.after ?? 0);
-  const netBefore = tierNetBefore / 12;
-  const netAfter = tierNetAfter / 12;
+  const chipPremiumBefore = metrics.find((m) => m.name === 'chip_premium')?.before ?? 0;
+  const chipPremiumAfter = metrics.find((m) => m.name === 'chip_premium')?.after ?? 0;
+  const totalBefore = tierNetBefore + chipPremiumBefore;
+  const totalAfter = tierNetAfter + chipPremiumAfter;
+  const netBefore = totalBefore / 12;
+  const netAfter = totalAfter / 12;
   const monthlyDelta = netAfter - netBefore;
   const hasHero = Math.abs(netBefore) > 0.5 || Math.abs(netAfter) > 0.5;
   const isCost = monthlyDelta > 0.5;
@@ -419,10 +426,23 @@ export default function ResultsView({ result, eventType, onTryAnother, onReset }
   // CHIP premium: family enrollment fee in states that charge one. Show
   // whenever non-zero either side, regardless of marketplace state.
   const chipPremiumMetric = metrics.find((m) => m.name === 'chip_premium');
-  if (chipPremiumMetric && (chipPremiumMetric.before !== 0 || chipPremiumMetric.after !== 0)) {
+  const hasChipPremium = chipPremiumMetric && (chipPremiumMetric.before !== 0 || chipPremiumMetric.after !== 0);
+  if (hasChipPremium && chipPremiumMetric) {
     financialMetrics.push({
       ...chipPremiumMetric,
       label: 'CHIP premium (your cost)',
+    });
+  }
+
+  // Total monthly cost row when there's more than one out-of-pocket item to sum.
+  if (showAcaPlans && hasChipPremium) {
+    financialMetrics.push({
+      name: 'total_monthly_cost',
+      label: 'Total monthly cost',
+      before: totalBefore,
+      after: totalAfter,
+      category: 'state_credit',
+      priority: 1,
     });
   }
 
@@ -434,7 +454,7 @@ export default function ResultsView({ result, eventType, onTryAnother, onReset }
           <div className="flex items-baseline gap-3 sm:gap-6 flex-col sm:flex-row sm:flex-wrap">
             <div>
               <div className="text-[10px] font-semibold uppercase tracking-widest text-gray-400 mb-1">
-                Change in premium cost
+                Change in monthly cost
               </div>
               <div className={`text-3xl sm:text-4xl font-bold tabular-nums ${heroTone}`}>
                 {heroSign}{heroAmount}
@@ -442,9 +462,10 @@ export default function ResultsView({ result, eventType, onTryAnother, onReset }
               </div>
             </div>
             <p className="text-sm text-gray-500 leading-relaxed flex-1 sm:min-w-[260px] max-w-prose">
-              Your monthly premium changes from{' '}
+              Your total monthly out-of-pocket changes from{' '}
               <b className="text-gray-700 tabular-nums">{formatCurrency(netBefore)}</b> to{' '}
-              <b className="text-gray-700 tabular-nums">{formatCurrency(netAfter)}</b>, after applying any tax credits.
+              <b className="text-gray-700 tabular-nums">{formatCurrency(netAfter)}</b>
+              {chipPremiumBefore > 0 || chipPremiumAfter > 0 ? ' (marketplace premium plus CHIP enrollment fee)' : ', after applying any tax credits'}.
             </p>
           </div>
         </div>
