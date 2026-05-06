@@ -178,7 +178,7 @@ export default function HouseholdWizard({ onComplete, onBack, onPartialChange }:
   const step4Valid = monthlyIncome !== '' && (!married || partnerMonthlyIncome !== '');
 
   return (
-    <div className="max-w-lg mx-auto">
+    <div className="max-w-2xl mx-auto">
       <div className="mb-6">
         <div className="flex items-center justify-between mb-2">
           <span className="text-sm font-medium text-gray-500">Step {step} of {TOTAL_STEPS_INCLUDING_CHANGE}</span>

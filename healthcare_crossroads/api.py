@@ -188,7 +188,6 @@ def _aca_premium_side(
     slcsp: float,
     lcbp: float,
     ptc: float,
-    net_premium: float,
     state: str,
 ) -> dict[str, Any]:
     """Build one side (before or after) of the acaPremiums payload.
@@ -213,14 +212,18 @@ def _aca_premium_side(
         bronze = 0.0
         bronze_is_estimate = False
 
-    silver_net_computed = max(0.0, slcsp - ptc)
-    silver_net = net_premium if net_premium > 0 else silver_net_computed
+    # Always compute net = gross - PTC. PolicyEngine's marketplace_net_premium
+    # returns 0 when the household isn't enrolled (Medicaid or above-400%-FPL
+    # without PTC), but the user wants to see the *hypothetical* out-of-pocket
+    # cost of marketplace coverage in those cases.
+    silver_net = max(0.0, slcsp - ptc)
+    bronze_net = max(0.0, bronze - ptc)
 
     return {
         "silverGross": slcsp,
         "silverNet": silver_net,
         "bronzeGross": bronze,
-        "bronzeNet": max(0.0, bronze - ptc),
+        "bronzeNet": bronze_net,
         "ptc": ptc,
         "bronzeIsEstimate": bronze_is_estimate,
     }
@@ -290,7 +293,6 @@ def format_result_for_frontend(result) -> dict:
     # Add ACA premium breakdown when marketplace coverage is in play
     slcsp_change = result.changes.get("slcsp")
     lcbp_change  = result.changes.get("lcbp")
-    net_change = result.changes.get("marketplace_net_premium")
     ptc_change = result.changes.get("premium_tax_credit")
     if slcsp_change and (slcsp_change.before > 0 or slcsp_change.after > 0):
         state = _extract_state_code(result.before_situation)
@@ -299,14 +301,12 @@ def format_result_for_frontend(result) -> dict:
                 slcsp=slcsp_change.before,
                 lcbp=lcbp_change.before if lcbp_change else 0,
                 ptc=ptc_change.before if ptc_change else 0,
-                net_premium=net_change.before if net_change else 0,
                 state=state,
             ),
             "after": _aca_premium_side(
                 slcsp=slcsp_change.after,
                 lcbp=lcbp_change.after if lcbp_change else 0,
                 ptc=ptc_change.after if ptc_change else 0,
-                net_premium=net_change.after if net_change else 0,
                 state=state,
             ),
         }
@@ -357,7 +357,6 @@ def run_baseline_response(household_dict: dict) -> dict:
                 slcsp=slcsp_b,
                 lcbp=baseline.results.get("lcbp", 0.0),
                 ptc=baseline.results.get("premium_tax_credit", 0.0),
-                net_premium=baseline.results.get("marketplace_net_premium", 0.0),
                 state=state,
             ),
         }

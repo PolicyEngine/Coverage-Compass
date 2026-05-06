@@ -31,7 +31,6 @@ export default function Header() {
               <h1 className="text-lg font-semibold text-gray-900 tracking-tight">
                 Coverage Compass
               </h1>
-              <p className="text-xs text-gray-500 -mt-0.5">coverage scenarios by PolicyEngine</p>
             </div>
           </Link>
 

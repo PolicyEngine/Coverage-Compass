@@ -22,8 +22,8 @@ from .household import Household, Person
 OUTPUT_VARIABLES = [
     "medicaid",                  # per-person benefit (drives coverage pill)
     "chip",                      # per-person benefit (drives coverage pill)
+    "chip_premium",              # household-side CHIP enrollment fee (17 states)
     "premium_tax_credit",        # ACA tax credit (annual)
-    "marketplace_net_premium",   # silver net after PTC (annual)
     "slcsp",                     # gross silver benchmark plan (annual)
     "lcbp",                      # gross lowest-cost bronze plan (annual, 2026+)
 ]

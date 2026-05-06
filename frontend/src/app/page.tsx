@@ -214,6 +214,12 @@ export default function Home() {
                   : `Single · age ${household.age}`} ·{' '}
                 ${Math.round(household.income / 12).toLocaleString()}/mo income
               </p>
+              {describeScenario(selectedEvent, eventParams, household) && (
+                <p className="mt-2 text-sm text-gray-700">
+                  <span className="text-[10px] font-semibold uppercase tracking-widest text-gray-400 mr-2">What changed</span>
+                  {describeScenario(selectedEvent, eventParams, household)}
+                </p>
+              )}
               <div className="flex gap-5 flex-wrap mt-4 pt-4 border-t border-gray-100 text-sm text-gray-500">
                 <span>Year: <b className="text-gray-900">{household.year}</b></span>
                 <button onClick={handleShare} className="ml-auto text-[#319795] hover:text-[#285E61] font-medium flex items-center gap-1.5">
@@ -283,6 +289,7 @@ export default function Home() {
               setEventParams(params);
               runSimulation(household, event, params);
             }}
+            onReset={handleReset}
           />
         )}
 
@@ -429,9 +436,10 @@ interface ScenarioCardProps {
 
 function ScenarioCard({ scenario, onClick, onRemove }: ScenarioCardProps) {
   const label = LIFE_EVENTS.find((e) => e.type === scenario.event)?.label ?? scenario.event;
-  const metrics = scenario.result.before?.metrics ?? [];
-  const netBefore = metrics.find((m) => m.name === 'marketplace_net_premium')?.before ?? 0;
-  const netAfter = metrics.find((m) => m.name === 'marketplace_net_premium')?.after ?? 0;
+  // Use silver net premium from acaPremiums (annual) so the delta matches the
+  // hero number on the result page. Falls back to 0 when ACA isn't in play.
+  const netBefore = scenario.result.acaPremiums?.before?.silverNet ?? 0;
+  const netAfter = scenario.result.acaPremiums?.after?.silverNet ?? 0;
   const monthlyDelta = (netAfter - netBefore) / 12;
   const isCost = monthlyDelta > 0.5;
   const isSavings = monthlyDelta < -0.5;
@@ -464,6 +472,67 @@ function ScenarioCard({ scenario, onClick, onRemove }: ScenarioCardProps) {
       </button>
     </div>
   );
+}
+
+// One-liner describing what the user actually entered for the scenario
+// (so the result page reflects "what changed", not just the original
+// household state).
+function describeScenario(
+  eventType: LifeEventType,
+  params: Record<string, unknown>,
+  household: Household,
+): string | null {
+  const fmt = (annual: number) => `$${Math.round(annual / 12).toLocaleString()}/mo`;
+  const married =
+    household.filingStatus === 'married_jointly' || household.filingStatus === 'married_separately';
+
+  switch (eventType) {
+    case 'changing_income': {
+      const newIncome = (params.newIncome as number) ?? household.income;
+      const newSpouseIncome = (params.newSpouseIncome as number) ?? household.spouseIncome;
+      const yourPart = `${fmt(household.income)} → ${fmt(newIncome)}`;
+      if (married) {
+        return `Income ${yourPart}; partner ${fmt(household.spouseIncome)} → ${fmt(newSpouseIncome)}`;
+      }
+      return `Income ${yourPart}`;
+    }
+    case 'moving_states': {
+      const newState = (params.newState as string) ?? household.state;
+      const newZip = (params.newZipCode as string) ?? '';
+      const before = `${household.state}${household.zipCode ? ' · ' + household.zipCode : ''}`;
+      const after = `${newState}${newZip ? ' · ' + newZip : ''}`;
+      return `Location ${before} → ${after}`;
+    }
+    case 'getting_married': {
+      const spouseAge = params.spouseAge as number | undefined;
+      const spouseIncome = params.spouseIncome as number | undefined;
+      const spouseChildAges = (params.spouseChildAges as number[] | undefined) ?? [];
+      const parts = [];
+      if (spouseAge) parts.push(`age ${spouseAge}`);
+      if (spouseIncome !== undefined) parts.push(`${fmt(spouseIncome)} income`);
+      if (spouseChildAges.length > 0) parts.push(`${spouseChildAges.length} child${spouseChildAges.length > 1 ? 'ren' : ''}`);
+      return parts.length > 0 ? `Adding partner: ${parts.join(', ')}` : 'Adding a partner';
+    }
+    case 'divorce': {
+      const childrenKeeping = params.childrenKeeping as number | undefined;
+      if (household.childAges.length > 0 && childrenKeeping !== undefined) {
+        const leaving = household.childAges.length - childrenKeeping;
+        return `Separating, keeping ${childrenKeeping} of ${household.childAges.length} child${household.childAges.length > 1 ? 'ren' : ''}${leaving > 0 ? ` (${leaving} with partner)` : ''}`;
+      }
+      return 'Separating from partner';
+    }
+    case 'losing_esi':
+      return 'Job-based coverage ending';
+    case 'having_baby': {
+      const idx = (params.pregnantMemberIndex as number) ?? 0;
+      if (married) return idx === 1 ? 'Partner becomes pregnant' : 'You become pregnant';
+      return 'You become pregnant';
+    }
+    case 'ending_pregnancy':
+      return 'Pregnancy ends';
+    default:
+      return null;
+  }
 }
 
 // Build the hero headline strictly from observable transitions in the

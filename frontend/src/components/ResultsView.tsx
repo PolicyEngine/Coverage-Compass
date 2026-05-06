@@ -23,15 +23,19 @@ const FINANCIAL_METRIC_NAMES = new Set([
 
 // Each metric's category tag, for the small label shown next to the row name.
 const METRIC_CATEGORY: Record<string, string> = {
+  full_premium: 'premium',
   premium_tax_credit: 'tax credit',
-  marketplace_net_premium: 'premium',
+  marketplace_net_premium: 'net cost',
+  chip_premium: 'enrollment fee',
 };
 
 // Each metric's diff-chip kind (drives the chip color + suffix word).
 type ChipKind = 'credit' | 'cost' | 'benefit';
 const METRIC_CHIP_KIND: Record<string, ChipKind> = {
+  full_premium: 'cost',
   premium_tax_credit: 'credit',
   marketplace_net_premium: 'cost',
+  chip_premium: 'cost',
 };
 
 function formatCurrency(value: number): string {
@@ -107,10 +111,27 @@ function DiffChip({ kind, monthlyDelta }: { kind: ChipKind; monthlyDelta: number
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
     <tr>
-      <td colSpan={3} className="px-5 pt-5 pb-2 text-[10px] font-semibold uppercase tracking-widest text-gray-400">
+      <td colSpan={4} className="px-5 pt-5 pb-2 text-[10px] font-semibold uppercase tracking-widest text-gray-400">
         {children}
       </td>
     </tr>
+  );
+}
+
+// Render a signed monthly delta. Cost metrics (premium): negative delta = green.
+// Credit/benefit metrics: positive delta = green. Zero = gray.
+function ChangeCell({ kind, monthlyDelta }: { kind: ChipKind; monthlyDelta: number }) {
+  if (Math.abs(monthlyDelta) < 0.5) {
+    return <span className="text-sm text-gray-300">No change</span>;
+  }
+  const isCost = kind === 'cost';
+  const favorable = isCost ? monthlyDelta < 0 : monthlyDelta > 0;
+  const sign = monthlyDelta > 0 ? '+' : '−';
+  const tone = favorable ? 'text-green-600' : 'text-red-600';
+  return (
+    <span className={`text-sm font-semibold tabular-nums ${tone}`}>
+      {sign}{formatCurrency(Math.abs(monthlyDelta))}/mo
+    </span>
   );
 }
 
@@ -127,6 +148,7 @@ function PersonRow({
   existsBefore: boolean;
   existsAfter: boolean;
 }) {
+  const changed = beforeCoverage !== afterCoverage || existsBefore !== existsAfter;
   return (
     <tr className="border-t border-gray-100">
       <td className="px-5 py-3 text-sm font-medium text-gray-900 align-middle w-44">{label}</td>
@@ -135,6 +157,13 @@ function PersonRow({
       </td>
       <td className="px-5 py-3 align-middle">
         <CoveragePill type={afterCoverage} exists={existsAfter} />
+      </td>
+      <td className="px-5 py-3 align-middle text-sm">
+        {changed ? (
+          <span className="text-[#285E61] font-medium">Changed</span>
+        ) : (
+          <span className="text-gray-300">No change</span>
+        )}
       </td>
     </tr>
   );
@@ -190,13 +219,11 @@ function MetricRow({
       <td className="px-5 py-3 align-middle text-sm tabular-nums text-gray-500">
         {`${formatCurrency(monthlyBefore)}/mo`}
       </td>
+      <td className="px-5 py-3 align-middle text-sm tabular-nums text-gray-700">
+        {`${formatCurrency(monthlyAfter)}/mo`}
+      </td>
       <td className="px-5 py-3 align-middle">
-        <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-sm tabular-nums text-gray-700">
-            {`${formatCurrency(monthlyAfter)}/mo`}
-          </span>
-          <DiffChip kind={chipKind} monthlyDelta={monthlyDelta} />
-        </div>
+        <ChangeCell kind={chipKind} monthlyDelta={monthlyDelta} />
       </td>
     </tr>
   );
@@ -341,20 +368,63 @@ export default function ResultsView({ result, eventType, onTryAnother, onReset }
   const afterESI = (result.healthcareAfter?.people || []).some((p) => p.coverage === 'ESI');
   const esiInPlay = beforeESI || afterESI;
 
-  // Financial rows. Marketplace premium row uses the selected tier's net cost.
-  const tierLabel = selectedTier === 'bronze' ? 'Bronze plan (your cost)' : 'Silver plan (your cost)';
-  const financialMetrics = metrics
-    .filter((m) => FINANCIAL_METRIC_NAMES.has(m.name))
-    .map((m): BenefitMetric => {
-      if (m.name === 'marketplace_net_premium' && showAcaPlans) {
-        return { ...m, label: tierLabel, before: tierNetBefore, after: tierNetAfter };
-      }
-      return m;
-    })
-    // Always keep the marketplace-premium row when ACA is in play, even if the
-    // tier-aware net is $0 in both columns (otherwise the inline tier toggle
-    // would vanish along with the row when bronze fully zeros out under PTC).
-    .filter((m) => (m.name === 'marketplace_net_premium' && showAcaPlans) || m.before !== 0 || m.after !== 0);
+  // Tier-aware ACA premium values (annual).
+  const tierGrossBefore = showAcaPlans
+    ? (selectedTier === 'bronze' ? acaBefore?.bronzeGross ?? 0 : acaBefore?.silverGross ?? 0)
+    : 0;
+  const tierGrossAfter = showAcaPlans
+    ? (selectedTier === 'bronze' ? acaAfter?.bronzeGross ?? 0 : acaAfter?.silverGross ?? 0)
+    : 0;
+  const ptcBeforeAnnual = metrics.find((m) => m.name === 'premium_tax_credit')?.before ?? 0;
+  const ptcAfterAnnual = metrics.find((m) => m.name === 'premium_tax_credit')?.after ?? 0;
+
+  // Build the financial rows. When ACA is in play, expand into three rows
+  // (Full premium / Tax credit / Your cost) so the user sees how the net is
+  // computed. Otherwise just show the existing PTC row if non-zero.
+  const financialMetrics: BenefitMetric[] = [];
+  if (showAcaPlans) {
+    const tierName = selectedTier === 'bronze' ? 'Bronze' : 'Silver';
+    financialMetrics.push({
+      name: 'full_premium',
+      label: `${tierName} full premium`,
+      before: tierGrossBefore,
+      after: tierGrossAfter,
+      category: 'state_credit',
+      priority: 1,
+    });
+    financialMetrics.push({
+      name: 'premium_tax_credit',
+      label: 'Premium tax credit',
+      before: ptcBeforeAnnual,
+      after: ptcAfterAnnual,
+      category: 'credit',
+      priority: 1,
+    });
+    financialMetrics.push({
+      name: 'marketplace_net_premium',
+      label: 'Your cost (after credit)',
+      before: tierNetBefore,
+      after: tierNetAfter,
+      category: 'state_credit',
+      priority: 1,
+    });
+  } else {
+    // No ACA in play: show PTC only if it's non-zero (rare).
+    const ptcMetric = metrics.find((m) => m.name === 'premium_tax_credit');
+    if (ptcMetric && (ptcMetric.before !== 0 || ptcMetric.after !== 0)) {
+      financialMetrics.push(ptcMetric);
+    }
+  }
+
+  // CHIP premium: family enrollment fee in states that charge one. Show
+  // whenever non-zero either side, regardless of marketplace state.
+  const chipPremiumMetric = metrics.find((m) => m.name === 'chip_premium');
+  if (chipPremiumMetric && (chipPremiumMetric.before !== 0 || chipPremiumMetric.after !== 0)) {
+    financialMetrics.push({
+      ...chipPremiumMetric,
+      label: 'CHIP premium (your cost)',
+    });
+  }
 
   return (
     <div className="space-y-4">
@@ -395,8 +465,9 @@ export default function ResultsView({ result, eventType, onTryAnother, onReset }
         <table className="w-full border-collapse">
           <colgroup>
             <col className="w-[28%]" />
-            <col className="w-[36%]" />
-            <col className="w-[36%]" />
+            <col className="w-[24%]" />
+            <col className="w-[24%]" />
+            <col className="w-[24%]" />
           </colgroup>
           <thead>
             <tr className="border-b border-gray-100 bg-gray-50/40">
@@ -408,6 +479,9 @@ export default function ResultsView({ result, eventType, onTryAnother, onReset }
               </th>
               <th className="px-5 py-3 text-left text-[10px] font-semibold text-gray-400 uppercase tracking-widest">
                 After
+              </th>
+              <th className="px-5 py-3 text-left text-[10px] font-semibold text-gray-400 uppercase tracking-widest">
+                Change
               </th>
             </tr>
           </thead>
@@ -435,7 +509,7 @@ export default function ResultsView({ result, eventType, onTryAnother, onReset }
                   <MetricRow
                     key={m.name}
                     metric={m}
-                    showTierToggle={m.name === 'marketplace_net_premium' && showAcaPlans && (acaScope?.bronzeGross ?? 0) > 0}
+                    showTierToggle={m.name === 'full_premium' && (acaScope?.bronzeGross ?? 0) > 0}
                     selectedTier={selectedTier}
                     onTierChange={setSelectedTier}
                   />
@@ -480,7 +554,7 @@ export default function ResultsView({ result, eventType, onTryAnother, onReset }
                 <MobileMetricCard
                   key={m.name}
                   metric={m}
-                  showTierToggle={m.name === 'marketplace_net_premium' && showAcaPlans && (acaScope?.bronzeGross ?? 0) > 0}
+                  showTierToggle={m.name === 'full_premium' && (acaScope?.bronzeGross ?? 0) > 0}
                   selectedTier={selectedTier}
                   onTierChange={setSelectedTier}
                 />

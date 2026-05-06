@@ -6,6 +6,7 @@ import { Household, LifeEventType, US_STATES, getStateFromZip } from '@/types';
 interface ChangeWizardProps {
   household: Household;
   onApply: (event: LifeEventType, params: Record<string, unknown>) => void;
+  onReset: () => void;
 }
 
 interface EventOption {
@@ -32,19 +33,11 @@ function getAvailableEvents(h: Household): EventOption[] {
     },
   ];
 
-  if (isMarried(h)) {
-    events.push({
-      type: 'divorce',
-      label: 'Divorce or separation',
-      description: 'Split into separate households.',
-    });
-  } else {
-    events.push({
-      type: 'getting_married',
-      label: 'Getting married',
-      description: 'Combine households with a partner.',
-    });
-  }
+  // Marriage and divorce events are temporarily hidden from the picker.
+  // The simulation logic still works (counterfactual sims for the
+  // partner-side household) — re-enable here when ready to re-launch.
+  // if (isMarried(h)) events.push({ type: 'divorce', label: 'Divorce or separation', description: 'Split into separate households.' });
+  // else events.push({ type: 'getting_married', label: 'Getting married', description: 'Combine households with a partner.' });
 
   if (h.hasESI || h.spouseHasESI) {
     events.push({
@@ -100,7 +93,7 @@ function inputClass() {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export default function ChangeWizard({ household, onApply }: ChangeWizardProps) {
+export default function ChangeWizard({ household, onApply, onReset }: ChangeWizardProps) {
   const [step, setStep] = useState<1 | 2>(1);
   const [eventType, setEventType] = useState<LifeEventType | null>(null);
 
@@ -214,8 +207,40 @@ export default function ChangeWizard({ household, onApply }: ChangeWizardProps) 
   const wizardStep = step === 1 ? 8 : 9;
   const progressPercent = (wizardStep / 9) * 100;
 
+  // Hard block ESI households. The tool models ACA marketplace, Medicaid,
+  // and CHIP coverage; we don't have data on employer plan options or
+  // employee premium contributions, so any modeling would be misleading.
+  if (household.hasESI || household.spouseHasESI) {
+    return (
+      <div className="max-w-2xl mx-auto">
+        <div className="bg-white border border-amber-300 rounded-xl p-6 shadow-sm">
+          <div className="text-[10px] font-semibold uppercase tracking-widest text-amber-700 mb-2">
+            Heads up
+          </div>
+          <h2 className="text-xl font-bold text-gray-900 mb-3">
+            Coverage Compass isn&apos;t designed for households with employer health insurance.
+          </h2>
+          <p className="text-sm text-gray-600 leading-relaxed mb-3">
+            We model how life events affect <b>ACA marketplace coverage</b>, <b>Medicaid</b>, and <b>CHIP</b>.
+            We don&apos;t have data on your employer&apos;s premium contribution, plan options, or out-of-pocket
+            costs, so any comparison we showed would be incomplete.
+          </p>
+          <p className="text-sm text-gray-600 leading-relaxed">
+            If you&apos;re thinking about losing employer coverage and want to see what the marketplace
+            would look like, click below to start over and re-enter without employer coverage.
+          </p>
+          <div className="mt-5">
+            <button type="button" onClick={onReset} className="btn btn-primary">
+              Start over with a new household
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="max-w-lg mx-auto">
+    <div className="max-w-2xl mx-auto">
       <div className="mb-6">
         <div className="flex items-center justify-between mb-2">
           <span className="text-sm font-medium text-gray-500">Step {wizardStep} of 9</span>
@@ -235,16 +260,6 @@ export default function ChangeWizard({ household, onApply }: ChangeWizardProps) 
             <h2 className="text-xl font-bold text-gray-900">What&apos;s changing?</h2>
             <p className="text-sm text-gray-500 mt-1">Pick the life event you want to model.</p>
           </div>
-
-          {(household.hasESI || household.spouseHasESI) && (
-            <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5">
-              <p className="text-sm text-[#92400E] leading-relaxed">
-                <b>Heads-up:</b> {household.hasESI && household.spouseHasESI ? 'you both have' : 'you or your partner has'} employer-sponsored insurance.
-                We don&apos;t model what your employer charges in monthly premiums, so cost comparisons against ACA marketplace plans
-                may be incomplete.
-              </p>
-            </div>
-          )}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             {events.map((opt) => (
               <button
