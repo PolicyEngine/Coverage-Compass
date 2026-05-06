@@ -52,12 +52,7 @@ function formatMonthly(annual: number): string {
   return formatCurrency(annual / 12);
 }
 
-// Anything that isn't ESI/Medicaid/CHIP/Marketplace is treated as a Basic
-// Health Program brand (NY Essential Plan, MinnesotaCare, OHP Bridge, Healthy DC).
-const STANDARD_COVERAGE = new Set(['ESI', 'Marketplace', 'Medicaid', 'CHIP']);
-
 function getCoverageLabel(type: string | null): string {
-  if (type === null || type === undefined) return 'No coverage';
   switch (type) {
     case 'ESI':
       return 'Employer-sponsored';
@@ -68,7 +63,7 @@ function getCoverageLabel(type: string | null): string {
     case 'CHIP':
       return 'CHIP';
     default:
-      return type; // BHP brand name, passed through as-is
+      return 'No coverage';
   }
 }
 
@@ -82,8 +77,6 @@ const COVERAGE_TONES: Record<string, string> = {
   CHIP: 'bg-pink-50 text-pink-800 border-pink-200',
 };
 
-const BHP_TONE = 'bg-emerald-50 text-emerald-800 border-emerald-200';
-
 function CoveragePill({ type, exists }: { type: string | null; exists: boolean }) {
   if (!exists) {
     return <span className="text-sm text-gray-300">Not applicable</span>;
@@ -91,8 +84,6 @@ function CoveragePill({ type, exists }: { type: string | null; exists: boolean }
   const label = getCoverageLabel(type);
   const tone = type && COVERAGE_TONES[type]
     ? COVERAGE_TONES[type]
-    : type && !STANDARD_COVERAGE.has(type)
-    ? BHP_TONE
     : 'bg-gray-50 text-gray-500 border-gray-200';
   return (
     <span className={`inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium border ${tone}`}>
@@ -135,14 +126,20 @@ function ChangeCell({
   kind,
   monthlyDelta,
   highlight = false,
+  small = false,
 }: {
   kind: ChipKind;
   monthlyDelta: number;
   highlight?: boolean;
+  small?: boolean;
 }) {
-  const sizeClass = highlight ? 'text-base font-bold' : 'text-sm font-semibold';
+  const sizeClass = highlight
+    ? 'text-base font-bold'
+    : small
+    ? 'text-xs font-medium'
+    : 'text-sm font-semibold';
   if (Math.abs(monthlyDelta) < 0.5) {
-    return <span className={`${highlight ? 'text-base' : 'text-sm'} text-gray-300`}>No change</span>;
+    return <span className={`${highlight ? 'text-base' : small ? 'text-xs' : 'text-sm'} text-gray-300`}>No change</span>;
   }
   const isCost = kind === 'cost';
   const favorable = isCost ? monthlyDelta < 0 : monthlyDelta > 0;
@@ -216,12 +213,14 @@ function MetricRow({
   selectedTier,
   onTierChange,
   highlight = false,
+  indented = false,
 }: {
   metric: BenefitMetric;
   showTierToggle?: boolean;
   selectedTier?: Tier;
   onTierChange?: (t: Tier) => void;
   highlight?: boolean;
+  indented?: boolean;
 }) {
   const category = METRIC_CATEGORY[metric.name] ?? metric.category.replace('_', ' ');
   const chipKind = METRIC_CHIP_KIND[metric.name] ?? 'cost';
@@ -244,21 +243,21 @@ function MetricRow({
 
   return (
     <tr className={rowClass}>
-      <td className="px-5 py-3 align-middle">
-        <div className={labelClass}>{metric.label}</div>
-        <div className="text-[11px] text-gray-400">{category}</div>
+      <td className={`align-middle ${indented ? 'pl-10 pr-5 py-2' : 'px-5 py-3'}`}>
+        <div className={`${labelClass} ${indented ? 'text-xs font-normal text-gray-500' : ''}`}>{metric.label}</div>
+        {!indented && <div className="text-[11px] text-gray-400">{category}</div>}
         {showTierToggle && selectedTier && onTierChange && (
           <TierToggle selected={selectedTier} onChange={onTierChange} />
         )}
       </td>
-      <td className={beforeClass}>
+      <td className={indented ? 'px-5 py-2 align-middle text-xs tabular-nums text-gray-400' : beforeClass}>
         {`${formatCurrency(monthlyBefore)}/mo`}
       </td>
-      <td className={afterClass}>
+      <td className={indented ? 'px-5 py-2 align-middle text-xs tabular-nums text-gray-500' : afterClass}>
         {`${formatCurrency(monthlyAfter)}/mo`}
       </td>
-      <td className="px-5 py-3 align-middle">
-        <ChangeCell kind={chipKind} monthlyDelta={monthlyDelta} highlight={highlight} />
+      <td className={indented ? 'px-5 py-2 align-middle' : 'px-5 py-3 align-middle'}>
+        <ChangeCell kind={chipKind} monthlyDelta={monthlyDelta} highlight={highlight} small={indented} />
       </td>
     </tr>
   );
@@ -300,12 +299,14 @@ function MobileMetricCard({
   selectedTier,
   onTierChange,
   highlight = false,
+  indented = false,
 }: {
   metric: BenefitMetric;
   showTierToggle?: boolean;
   selectedTier?: Tier;
   onTierChange?: (t: Tier) => void;
   highlight?: boolean;
+  indented?: boolean;
 }) {
   const category = METRIC_CATEGORY[metric.name] ?? metric.category.replace('_', ' ');
   const chipKind = METRIC_CHIP_KIND[metric.name] ?? 'cost';
@@ -315,10 +316,18 @@ function MobileMetricCard({
 
   const wrapperClass = highlight
     ? 'border-2 border-gray-300 rounded-lg p-3 bg-white'
+    : indented
+    ? 'border border-gray-100 rounded-lg p-2 ml-4 bg-white text-xs'
     : 'border border-gray-100 rounded-lg p-3 bg-gray-50/40';
-  const labelClass = highlight ? 'text-base font-bold text-gray-900' : 'text-sm font-medium text-gray-900';
+  const labelClass = highlight
+    ? 'text-base font-bold text-gray-900'
+    : indented
+    ? 'text-xs text-gray-500'
+    : 'text-sm font-medium text-gray-900';
   const valueClass = highlight
     ? 'text-base font-bold tabular-nums text-gray-900'
+    : indented
+    ? 'text-xs tabular-nums text-gray-500'
     : 'text-sm tabular-nums text-gray-700';
 
   return (
@@ -368,6 +377,7 @@ export default function ResultsView({ result, eventType, onTryAnother, onReset }
   }
 
   const [selectedTier, setSelectedTier] = useState<Tier>('silver');
+  const [showBreakdown, setShowBreakdown] = useState(false);
 
   const metrics = result.before.metrics || [];
 
@@ -428,64 +438,82 @@ export default function ResultsView({ result, eventType, onTryAnother, onReset }
   const ptcBeforeAnnual = metrics.find((m) => m.name === 'premium_tax_credit')?.before ?? 0;
   const ptcAfterAnnual = metrics.find((m) => m.name === 'premium_tax_credit')?.after ?? 0;
 
-  // Build the financial rows. When ACA is in play, expand into three rows
-  // (Full premium / Tax credit / Your cost) so the user sees how the net is
-  // computed. Otherwise just show the existing PTC row if non-zero.
-  const financialMetrics: BenefitMetric[] = [];
+  // CHIP premium presence (used to gate the row + total row).
+  const chipPremiumMetric = metrics.find((m) => m.name === 'chip_premium');
+  const hasChipPremium =
+    !!chipPremiumMetric && (chipPremiumMetric.before !== 0 || chipPremiumMetric.after !== 0);
+
+  // Build the financial rows in display order. ACA breakdown rows
+  // (full premium + PTC) are tagged so the table can collapse them
+  // behind a "Show breakdown" expander; "Your cost" stays primary.
+  type Row = { metric: BenefitMetric; isBreakdown?: boolean; isTotal?: boolean };
+  const financialRows: Row[] = [];
   if (showAcaPlans) {
     const tierName = selectedTier === 'bronze' ? 'Bronze' : 'Silver';
-    financialMetrics.push({
-      name: 'full_premium',
-      label: `${tierName} full premium`,
-      before: tierGrossBefore,
-      after: tierGrossAfter,
-      category: 'state_credit',
-      priority: 1,
+    // Primary: net cost with the tier toggle.
+    financialRows.push({
+      metric: {
+        name: 'marketplace_net_premium',
+        label: 'Your cost (after credit)',
+        before: tierNetBefore,
+        after: tierNetAfter,
+        category: 'state_credit',
+        priority: 1,
+      },
     });
-    financialMetrics.push({
-      name: 'premium_tax_credit',
-      label: 'Premium tax credit',
-      before: ptcBeforeAnnual,
-      after: ptcAfterAnnual,
-      category: 'credit',
-      priority: 1,
+    // Breakdown: full premium + PTC, hidden by default behind the expander.
+    financialRows.push({
+      metric: {
+        name: 'full_premium',
+        label: `${tierName} full premium`,
+        before: tierGrossBefore,
+        after: tierGrossAfter,
+        category: 'state_credit',
+        priority: 1,
+      },
+      isBreakdown: true,
     });
-    financialMetrics.push({
-      name: 'marketplace_net_premium',
-      label: 'Your cost (after credit)',
-      before: tierNetBefore,
-      after: tierNetAfter,
-      category: 'state_credit',
-      priority: 1,
+    financialRows.push({
+      metric: {
+        name: 'premium_tax_credit',
+        label: 'Premium tax credit',
+        before: ptcBeforeAnnual,
+        after: ptcAfterAnnual,
+        category: 'credit',
+        priority: 1,
+      },
+      isBreakdown: true,
     });
   } else {
     // No ACA in play: show PTC only if it's non-zero (rare).
     const ptcMetric = metrics.find((m) => m.name === 'premium_tax_credit');
     if (ptcMetric && (ptcMetric.before !== 0 || ptcMetric.after !== 0)) {
-      financialMetrics.push(ptcMetric);
+      financialRows.push({ metric: ptcMetric });
     }
   }
 
-  // CHIP premium: family enrollment fee in states that charge one. Show
-  // whenever non-zero either side, regardless of marketplace state.
-  const chipPremiumMetric = metrics.find((m) => m.name === 'chip_premium');
-  const hasChipPremium = chipPremiumMetric && (chipPremiumMetric.before !== 0 || chipPremiumMetric.after !== 0);
   if (hasChipPremium && chipPremiumMetric) {
-    financialMetrics.push({
-      ...chipPremiumMetric,
-      label: 'CHIP premium (your cost)',
+    financialRows.push({
+      metric: { ...chipPremiumMetric, label: 'CHIP premium (your cost)' },
     });
   }
 
-  // Total monthly cost row when there's more than one out-of-pocket item to sum.
-  if (showAcaPlans && hasChipPremium) {
-    financialMetrics.push({
-      name: 'total_monthly_cost',
-      label: 'Total monthly cost',
-      before: totalBefore,
-      after: totalAfter,
-      category: 'state_credit',
-      priority: 1,
+  // Total only when both an ACA cost and a CHIP cost are in play in at
+  // least one column. Either column having both, or one column ACA and
+  // the other CHIP, both qualify.
+  const hasAcaCost = (tierNetBefore + tierNetAfter) > 0;
+  const hasChipCost = (chipPremiumBefore + chipPremiumAfter) > 0;
+  if (hasAcaCost && hasChipCost) {
+    financialRows.push({
+      metric: {
+        name: 'total_monthly_cost',
+        label: 'Total monthly cost',
+        before: totalBefore,
+        after: totalAfter,
+        category: 'state_credit',
+        priority: 1,
+      },
+      isTotal: true,
     });
   }
 
@@ -566,19 +594,38 @@ export default function ResultsView({ result, eventType, onTryAnother, onReset }
               );
             })}
 
-            {financialMetrics.length > 0 && (
+            {financialRows.length > 0 && (
               <>
                 <SectionLabel>Per-month financial impact</SectionLabel>
-                {financialMetrics.map((m) => (
-                  <MetricRow
-                    key={m.name}
-                    metric={m}
-                    showTierToggle={m.name === 'full_premium' && (acaScope?.bronzeGross ?? 0) > 0}
-                    selectedTier={selectedTier}
-                    onTierChange={setSelectedTier}
-                    highlight={m.name === 'total_monthly_cost'}
-                  />
-                ))}
+                {financialRows.map((row) => {
+                  if (row.isBreakdown && !showBreakdown) return null;
+                  return (
+                    <MetricRow
+                      key={row.metric.name}
+                      metric={row.metric}
+                      showTierToggle={row.metric.name === 'marketplace_net_premium' && (acaScope?.bronzeGross ?? 0) > 0}
+                      selectedTier={selectedTier}
+                      onTierChange={setSelectedTier}
+                      highlight={row.isTotal}
+                      indented={row.isBreakdown}
+                    />
+                  );
+                })}
+                {/* Expander for the ACA breakdown rows. Only visible when ACA is in play. */}
+                {showAcaPlans && (
+                  <tr>
+                    <td colSpan={4} className="px-5 py-2">
+                      <button
+                        type="button"
+                        onClick={() => setShowBreakdown((v) => !v)}
+                        className="text-[11px] font-medium text-[#319795] hover:text-[#285E61] inline-flex items-center gap-1"
+                      >
+                        <span className={`transition-transform ${showBreakdown ? 'rotate-90' : ''}`}>▸</span>
+                        {showBreakdown ? 'Hide premium breakdown' : 'Show premium breakdown (full premium and tax credit)'}
+                      </button>
+                    </td>
+                  </tr>
+                )}
               </>
             )}
           </tbody>
@@ -609,22 +656,36 @@ export default function ResultsView({ result, eventType, onTryAnother, onReset }
           </div>
         </div>
 
-        {financialMetrics.length > 0 && (
+        {financialRows.length > 0 && (
           <div>
             <div className="text-[10px] font-semibold uppercase tracking-widest text-gray-400 mb-2">
               Per-month financial impact
             </div>
             <div className="space-y-2">
-              {financialMetrics.map((m) => (
-                <MobileMetricCard
-                  key={m.name}
-                  metric={m}
-                  showTierToggle={m.name === 'full_premium' && (acaScope?.bronzeGross ?? 0) > 0}
-                  selectedTier={selectedTier}
-                  onTierChange={setSelectedTier}
-                  highlight={m.name === 'total_monthly_cost'}
-                />
-              ))}
+              {financialRows.map((row) => {
+                if (row.isBreakdown && !showBreakdown) return null;
+                return (
+                  <MobileMetricCard
+                    key={row.metric.name}
+                    metric={row.metric}
+                    showTierToggle={row.metric.name === 'marketplace_net_premium' && (acaScope?.bronzeGross ?? 0) > 0}
+                    selectedTier={selectedTier}
+                    onTierChange={setSelectedTier}
+                    highlight={row.isTotal}
+                    indented={row.isBreakdown}
+                  />
+                );
+              })}
+              {showAcaPlans && (
+                <button
+                  type="button"
+                  onClick={() => setShowBreakdown((v) => !v)}
+                  className="text-xs font-medium text-[#319795] hover:text-[#285E61] inline-flex items-center gap-1 self-start"
+                >
+                  <span className={`transition-transform ${showBreakdown ? 'rotate-90' : ''}`}>▸</span>
+                  {showBreakdown ? 'Hide premium breakdown' : 'Show premium breakdown'}
+                </button>
+              )}
             </div>
           </div>
         )}

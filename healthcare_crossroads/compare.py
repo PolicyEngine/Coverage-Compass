@@ -58,12 +58,13 @@ class PersonHealthcare:
         """Return the primary coverage type for this person."""
         if self.esi:
             return "ESI"
-        if self.medicaid:
+        # BHP enrollees (NY Essential Plan, MinnesotaCare, OHP Bridge, Healthy DC)
+        # are surfaced as Medicaid for now — same UX bucket, no separate pill.
+        # The bhp / bhp_label fields stay populated so we can differentiate later.
+        if self.medicaid or self.bhp:
             return "Medicaid"
         if self.chip:
             return "CHIP"
-        if self.bhp:
-            return self.bhp_label or "Basic Health Program"
         if self.marketplace:
             return "Marketplace"
         return None
