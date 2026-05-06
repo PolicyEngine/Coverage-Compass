@@ -597,35 +597,45 @@ export default function ResultsView({ result, eventType, onTryAnother, onReset }
             {financialRows.length > 0 && (
               <>
                 <SectionLabel>Per-month financial impact</SectionLabel>
-                {financialRows.map((row) => {
-                  if (row.isBreakdown && !showBreakdown) return null;
-                  return (
-                    <MetricRow
-                      key={row.metric.name}
-                      metric={row.metric}
-                      showTierToggle={row.metric.name === 'marketplace_net_premium' && (acaScope?.bronzeGross ?? 0) > 0}
-                      selectedTier={selectedTier}
-                      onTierChange={setSelectedTier}
-                      highlight={row.isTotal}
-                      indented={row.isBreakdown}
-                    />
-                  );
-                })}
-                {/* Expander for the ACA breakdown rows. Only visible when ACA is in play. */}
-                {showAcaPlans && (
-                  <tr>
-                    <td colSpan={4} className="px-5 py-2">
-                      <button
-                        type="button"
-                        onClick={() => setShowBreakdown((v) => !v)}
-                        className="text-[11px] font-medium text-[#319795] hover:text-[#285E61] inline-flex items-center gap-1"
-                      >
-                        <span className={`transition-transform ${showBreakdown ? 'rotate-90' : ''}`}>▸</span>
-                        {showBreakdown ? 'Hide premium breakdown' : 'Show premium breakdown (full premium and tax credit)'}
-                      </button>
-                    </td>
-                  </tr>
-                )}
+                {(() => {
+                  // Render the rows in order, but place the expander button
+                  // exactly where the breakdown rows would appear (between
+                  // "Your cost" and "CHIP premium" / "Total").
+                  const elements: React.ReactNode[] = [];
+                  let expanderRendered = false;
+                  for (const row of financialRows) {
+                    if (row.isBreakdown && !expanderRendered) {
+                      expanderRendered = true;
+                      elements.push(
+                        <tr key="__expander">
+                          <td colSpan={4} className="px-5 py-2 border-t border-gray-100">
+                            <button
+                              type="button"
+                              onClick={() => setShowBreakdown((v) => !v)}
+                              className="text-[11px] font-medium text-[#319795] hover:text-[#285E61] inline-flex items-center gap-1"
+                            >
+                              <span className={`transition-transform inline-block ${showBreakdown ? 'rotate-90' : ''}`}>▸</span>
+                              {showBreakdown ? 'Hide premium breakdown' : 'Show premium breakdown (full premium and tax credit)'}
+                            </button>
+                          </td>
+                        </tr>,
+                      );
+                    }
+                    if (row.isBreakdown && !showBreakdown) continue;
+                    elements.push(
+                      <MetricRow
+                        key={row.metric.name}
+                        metric={row.metric}
+                        showTierToggle={row.metric.name === 'marketplace_net_premium' && (acaScope?.bronzeGross ?? 0) > 0}
+                        selectedTier={selectedTier}
+                        onTierChange={setSelectedTier}
+                        highlight={row.isTotal}
+                        indented={row.isBreakdown}
+                      />,
+                    );
+                  }
+                  return elements;
+                })()}
               </>
             )}
           </tbody>
@@ -662,30 +672,39 @@ export default function ResultsView({ result, eventType, onTryAnother, onReset }
               Per-month financial impact
             </div>
             <div className="space-y-2">
-              {financialRows.map((row) => {
-                if (row.isBreakdown && !showBreakdown) return null;
-                return (
-                  <MobileMetricCard
-                    key={row.metric.name}
-                    metric={row.metric}
-                    showTierToggle={row.metric.name === 'marketplace_net_premium' && (acaScope?.bronzeGross ?? 0) > 0}
-                    selectedTier={selectedTier}
-                    onTierChange={setSelectedTier}
-                    highlight={row.isTotal}
-                    indented={row.isBreakdown}
-                  />
-                );
-              })}
-              {showAcaPlans && (
-                <button
-                  type="button"
-                  onClick={() => setShowBreakdown((v) => !v)}
-                  className="text-xs font-medium text-[#319795] hover:text-[#285E61] inline-flex items-center gap-1 self-start"
-                >
-                  <span className={`transition-transform ${showBreakdown ? 'rotate-90' : ''}`}>▸</span>
-                  {showBreakdown ? 'Hide premium breakdown' : 'Show premium breakdown'}
-                </button>
-              )}
+              {(() => {
+                const elements: React.ReactNode[] = [];
+                let expanderRendered = false;
+                for (const row of financialRows) {
+                  if (row.isBreakdown && !expanderRendered) {
+                    expanderRendered = true;
+                    elements.push(
+                      <button
+                        key="__expander"
+                        type="button"
+                        onClick={() => setShowBreakdown((v) => !v)}
+                        className="text-xs font-medium text-[#319795] hover:text-[#285E61] inline-flex items-center gap-1 self-start py-1"
+                      >
+                        <span className={`transition-transform inline-block ${showBreakdown ? 'rotate-90' : ''}`}>▸</span>
+                        {showBreakdown ? 'Hide premium breakdown' : 'Show premium breakdown'}
+                      </button>,
+                    );
+                  }
+                  if (row.isBreakdown && !showBreakdown) continue;
+                  elements.push(
+                    <MobileMetricCard
+                      key={row.metric.name}
+                      metric={row.metric}
+                      showTierToggle={row.metric.name === 'marketplace_net_premium' && (acaScope?.bronzeGross ?? 0) > 0}
+                      selectedTier={selectedTier}
+                      onTierChange={setSelectedTier}
+                      highlight={row.isTotal}
+                      indented={row.isBreakdown}
+                    />,
+                  );
+                }
+                return elements;
+              })()}
             </div>
           </div>
         )}
