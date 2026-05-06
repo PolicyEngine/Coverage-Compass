@@ -391,58 +391,34 @@ export default function HouseholdWizard({ onComplete, onBack, onPartialChange }:
 
         {step === 5 && (
           <div>
-            <h2 className="text-2xl font-bold text-gray-900 mb-2">Who has health insurance through an employer?</h2>
+            <h2 className="text-2xl font-bold text-gray-900 mb-2">
+              Does anyone in your household have health insurance through an employer?
+            </h2>
             <p className="text-sm text-gray-500 mb-6" />
-            {!married ? (
-              <div className="flex flex-col gap-0">
-                <button
-                  type="button"
-                  onClick={() => selectESI(true, false)}
-                  className={`w-full text-left px-4 py-3 rounded-xl border-2 font-medium transition-all mb-2 ${
-                    esiTouched && hasESI
-                      ? 'border-[#319795] bg-[#E6FFFA] text-[#285E61]'
-                      : 'border-gray-200 text-gray-900 hover:border-[#319795] hover:bg-[#E6FFFA]'
-                  }`}
-                >
-                  Yes, I do
-                </button>
-                <button
-                  type="button"
-                  onClick={() => selectESI(false, false)}
-                  className={`w-full text-left px-4 py-3 rounded-xl border-2 font-medium transition-all mb-2 ${
-                    esiTouched && !hasESI
-                      ? 'border-[#319795] bg-[#E6FFFA] text-[#285E61]'
-                      : 'border-gray-200 text-gray-900 hover:border-[#319795] hover:bg-[#E6FFFA]'
-                  }`}
-                >
-                  No, I don&apos;t
-                </button>
-              </div>
-            ) : (
-              <div className="flex flex-col gap-0">
-                {(
-                  [
-                    { label: 'Just me', self: true, partner: false },
-                    { label: 'Just my partner', self: false, partner: true },
-                    { label: 'Both of us', self: true, partner: true },
-                    { label: 'Neither of us', self: false, partner: false },
-                  ] as { label: string; self: boolean; partner: boolean }[]
-                ).map((opt) => (
-                  <button
-                    key={opt.label}
-                    type="button"
-                    onClick={() => selectESI(opt.self, opt.partner)}
-                    className={`w-full text-left px-4 py-3 rounded-xl border-2 font-medium transition-all mb-2 ${
-                      esiTouched && hasESI === opt.self && spouseHasESI === opt.partner
-                        ? 'border-[#319795] bg-[#E6FFFA] text-[#285E61]'
-                        : 'border-gray-200 text-gray-900 hover:border-[#319795] hover:bg-[#E6FFFA]'
-                    }`}
-                  >
-                    {opt.label}
-                  </button>
-                ))}
-              </div>
-            )}
+            <div className="flex flex-col gap-0">
+              <button
+                type="button"
+                onClick={() => selectESI(true, married)}
+                className={`w-full text-left px-4 py-3 rounded-xl border-2 font-medium transition-all mb-2 ${
+                  esiTouched && (hasESI || spouseHasESI)
+                    ? 'border-[#319795] bg-[#E6FFFA] text-[#285E61]'
+                    : 'border-gray-200 text-gray-900 hover:border-[#319795] hover:bg-[#E6FFFA]'
+                }`}
+              >
+                Yes
+              </button>
+              <button
+                type="button"
+                onClick={() => selectESI(false, false)}
+                className={`w-full text-left px-4 py-3 rounded-xl border-2 font-medium transition-all mb-2 ${
+                  esiTouched && !hasESI && !spouseHasESI
+                    ? 'border-[#319795] bg-[#E6FFFA] text-[#285E61]'
+                    : 'border-gray-200 text-gray-900 hover:border-[#319795] hover:bg-[#E6FFFA]'
+                }`}
+              >
+                No
+              </button>
+            </div>
             <div className="flex justify-between mt-4">
               <button
                 type="button"

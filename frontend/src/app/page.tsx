@@ -311,9 +311,17 @@ export default function Home() {
           <div className="mt-4 bg-white border border-gray-200 rounded-xl p-8 shadow-sm text-center">
             <p className="text-red-600 font-medium mb-1">Simulation failed</p>
             <p className="text-gray-500 text-sm mb-4">{error}</p>
-            <button onClick={handleRun} disabled={!selectedEvent} className="text-sm text-[#319795] hover:text-[#285E61] font-medium">
-              Try again →
-            </button>
+            <div className="flex justify-center gap-3 flex-wrap">
+              <button onClick={handleRun} disabled={!selectedEvent} className="btn btn-secondary">
+                Try again
+              </button>
+              <button onClick={handleTryAnother} className="btn btn-ghost">
+                Pick a different change
+              </button>
+              <button onClick={handleReset} className="btn btn-ghost">
+                Start over with a new household
+              </button>
+            </div>
           </div>
         )}
 
@@ -386,21 +394,10 @@ function PartialSummary({ partial }: { partial: Partial<Household> }) {
     items.push({ label: 'Income', value: yours + partner });
   }
   if (partial.hasESI !== undefined || partial.spouseHasESI !== undefined) {
-    const married =
-      partial.filingStatus === 'married_jointly' || partial.filingStatus === 'married_separately';
-    let value: string;
-    if (!married) {
-      value = partial.hasESI ? 'Yes' : 'No';
-    } else if (partial.hasESI && partial.spouseHasESI) {
-      value = 'Both';
-    } else if (partial.hasESI) {
-      value = 'You only';
-    } else if (partial.spouseHasESI) {
-      value = 'Partner only';
-    } else {
-      value = 'Neither';
-    }
-    items.push({ label: 'Job coverage', value });
+    items.push({
+      label: 'Job coverage',
+      value: partial.hasESI || partial.spouseHasESI ? 'Yes' : 'No',
+    });
   }
   if (partial.childAges && partial.childAges.length > 0) {
     items.push({
