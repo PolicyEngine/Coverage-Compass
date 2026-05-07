@@ -254,7 +254,7 @@ export default function ChangeWizard({ household, onApply, onReset }: ChangeWiza
             <h2 className="text-xl font-bold text-gray-900">What&apos;s changing?</h2>
             <p className="text-sm text-gray-500 mt-1">Pick the life event you want to model.</p>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
             {events.map((opt) => (
               <button
                 key={opt.type}
