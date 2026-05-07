@@ -85,8 +85,6 @@ export type LifeEventType =
 export interface LifeEvent {
   type: LifeEventType;
   label: string;
-  description: string;
-  params?: Record<string, unknown>;
 }
 
 export interface BenefitMetric {
@@ -95,87 +93,55 @@ export interface BenefitMetric {
   before: number;
   after: number;
   category: 'income' | 'tax' | 'benefit' | 'credit' | 'state_credit' | 'state_benefit';
-  priority: 1 | 2; // 1 = primary (always shown), 2 = secondary (in "More" tab)
+  priority: 1 | 2;
 }
 
 export interface PersonHealthcare {
   index: number;
   label: string; // "You", "Spouse", "Child 1", etc.
-  coverage: 'ESI' | 'Medicaid' | 'CHIP' | 'Marketplace' | null;
+  // Standard coverage types plus state-specific BHP brand names
+  // (e.g. NY Essential Plan, MinnesotaCare, OHP Bridge, Healthy DC).
+  coverage: string | null;
 }
 
 export interface HealthcareCoverage {
   people: PersonHealthcare[];
-  summary: Record<string, string[]>; // e.g., { "Medicaid": ["You", "Child 1"], "CHIP": ["Child 2"] }
+  summary: Record<string, string[]>; // e.g. { "Medicaid": ["You", "Child 1"] }
   has_ptc: boolean;
 }
 
+export interface AcaPremiumSide {
+  silverGross: number;
+  silverNet: number;
+  bronzeGross: number;
+  bronzeNet: number;
+  ptc: number;
+}
+
 export interface SimulationResult {
-  before: {
-    netIncome: number;
-    totalTax: number;
-    totalBenefits: number;
-    metrics: BenefitMetric[];
-  };
-  after: {
-    netIncome: number;
-    totalTax: number;
-    totalBenefits: number;
-    metrics: BenefitMetric[];
-  };
-  diff: {
-    netIncome: number;
-    totalTax: number;
-    totalBenefits: number;
-  };
+  // The backend also returns netIncome/totalTax/totalBenefits and event
+  // metadata, but the frontend doesn't read them. Only metrics drive the UI.
+  before: { metrics: BenefitMetric[] };
+  after: { metrics: BenefitMetric[] };
   healthcareBefore?: HealthcareCoverage;
   healthcareAfter?: HealthcareCoverage;
   acaPremiums?: {
-    before: { silverGross: number; silverNet: number; bronzeGross: number; bronzeNet: number; ptc: number; bronzeIsEstimate?: boolean };
-    after:  { silverGross: number; silverNet: number; bronzeGross: number; bronzeNet: number; ptc: number; bronzeIsEstimate?: boolean };
-  };
-  event?: {
-    name: string;
-    description: string;
+    before: AcaPremiumSide;
+    after: AcaPremiumSide;
   };
 }
 
+// Sentence-case labels match what the user picks in the change wizard,
+// so the hero badge that displays in caps reads consistently with the
+// wizard's option text.
 export const LIFE_EVENTS: LifeEvent[] = [
-  {
-    type: 'having_baby',
-    label: 'Being Pregnant',
-    description: 'See how pregnancy affects your Medicaid eligibility and coverage right now',
-  },
-  {
-    type: 'ending_pregnancy',
-    label: 'No Longer Pregnant',
-    description: 'See how coverage shifts once pregnancy ends',
-  },
-  {
-    type: 'getting_married',
-    label: 'Getting Married',
-    description: 'Combine households and compare the new coverage picture',
-  },
-  {
-    type: 'divorce',
-    label: 'Divorce or Separation',
-    description: 'Model how separating households changes coverage options',
-  },
-  {
-    type: 'moving_states',
-    label: 'Move',
-    description: 'Compare healthcare support before and after relocating',
-  },
-  {
-    type: 'changing_income',
-    label: 'Changing Income',
-    description: 'Test how income changes affect Medicaid and ACA subsidy eligibility',
-  },
-  {
-    type: 'losing_esi',
-    label: 'Losing Job-Based Coverage',
-    description: 'See what happens when employer-sponsored insurance goes away',
-  },
+  { type: 'changing_income', label: 'Income change' },
+  { type: 'moving_states', label: 'Move' },
+  { type: 'losing_esi', label: 'Losing job-based coverage' },
+  { type: 'having_baby', label: 'Becoming pregnant' },
+  { type: 'ending_pregnancy', label: 'No longer pregnant' },
+  { type: 'getting_married', label: 'Getting married' },
+  { type: 'divorce', label: 'Divorce or separation' },
 ];
 
 export const US_STATES = [

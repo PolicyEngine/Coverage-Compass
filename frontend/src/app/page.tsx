@@ -263,7 +263,7 @@ export default function Home() {
                     What if something changed?
                   </h1>
                   <p className="text-[15px] text-gray-500 leading-relaxed">
-                    Tap any field below (<b className="text-gray-700">income</b>, <b className="text-gray-700">filing status</b>, <b className="text-gray-700">location</b>, <b className="text-gray-700">job coverage</b>, or <b className="text-gray-700">children</b>) to see how it changes your healthcare picture.
+                    Pick a life event below to see how it would affect your healthcare coverage and monthly cost.
                   </p>
                 </div>
                 <button

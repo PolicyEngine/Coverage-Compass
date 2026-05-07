@@ -182,7 +182,7 @@ export default function HouseholdWizard({ onComplete, onBack, onPartialChange }:
   const step4Valid = monthlyIncome !== '';
 
   return (
-    <div className="max-w-2xl mx-auto">
+    <div>
       <div className="mb-6">
         <div className="flex items-center justify-between mb-2">
           <span className="text-sm font-medium text-gray-500">Step {step} of {TOTAL_STEPS_INCLUDING_CHANGE}</span>
@@ -340,7 +340,7 @@ export default function HouseholdWizard({ onComplete, onBack, onPartialChange }:
         {step === 4 && (
           <form onSubmit={(e) => { e.preventDefault(); if (step4Valid) goNext(); }}>
             <h2 className="text-2xl font-bold text-gray-900 mb-2">What&apos;s your household&apos;s monthly income?</h2>
-            <p className="text-sm text-gray-500 mb-6">Before taxes. Add up everyone in the household — wages, self-employment, etc.</p>
+            <p className="text-sm text-gray-500 mb-6">Before taxes. Add up everyone in the household: wages, self-employment, etc.</p>
             <div className="flex flex-col gap-4">
               <div>
                 <label className="label">Total household monthly income</label>

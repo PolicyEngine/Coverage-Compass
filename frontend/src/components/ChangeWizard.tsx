@@ -35,7 +35,7 @@ function getAvailableEvents(h: Household): EventOption[] {
 
   // Marriage and divorce events are temporarily hidden from the picker.
   // The simulation logic still works (counterfactual sims for the
-  // partner-side household) — re-enable here when ready to re-launch.
+  // partner-side household). Re-enable here when ready to re-launch.
   // if (isMarried(h)) events.push({ type: 'divorce', label: 'Divorce or separation', description: 'Split into separate households.' });
   // else events.push({ type: 'getting_married', label: 'Getting married', description: 'Combine households with a partner.' });
 
@@ -197,8 +197,6 @@ export default function ChangeWizard({ household, onApply, onReset }: ChangeWiza
     }
   }
 
-  const selectedLabel = events.find((e) => e.type === eventType)?.label ?? '';
-
   // Display step number continues from the household wizard (steps 1-7).
   const wizardStep = step === 1 ? 8 : 9;
   const progressPercent = (wizardStep / 9) * 100;
@@ -208,7 +206,7 @@ export default function ChangeWizard({ household, onApply, onReset }: ChangeWiza
   // employee premium contributions, so any modeling would be misleading.
   if (household.hasESI || household.spouseHasESI) {
     return (
-      <div className="max-w-2xl mx-auto">
+      <div>
         <div className="bg-white border border-amber-300 rounded-xl p-6 shadow-sm">
           <div className="text-[10px] font-semibold uppercase tracking-widest text-amber-700 mb-2">
             Heads up
@@ -236,7 +234,7 @@ export default function ChangeWizard({ household, onApply, onReset }: ChangeWiza
   }
 
   return (
-    <div className="max-w-2xl mx-auto">
+    <div>
       <div className="mb-6">
         <div className="flex items-center justify-between mb-2">
           <span className="text-sm font-medium text-gray-500">Step {wizardStep} of 9</span>
@@ -442,7 +440,7 @@ export default function ChangeWizard({ household, onApply, onReset }: ChangeWiza
                 )}
                 {!household.hasESI && !household.spouseHasESI && household.childAges.length === 0 && (
                   <p className="text-sm text-gray-500">
-                    Click apply to model the divorce.
+                    Click Run scenario to model the divorce.
                   </p>
                 )}
               </>
@@ -450,7 +448,7 @@ export default function ChangeWizard({ household, onApply, onReset }: ChangeWiza
 
             {eventType === 'losing_esi' && (
               <p className="text-sm text-gray-600">
-                Your employer health insurance ends. Click Apply to see your post-loss coverage options.
+                Your employer health insurance ends. Click Run scenario to see your post-loss coverage options.
               </p>
             )}
 
@@ -480,8 +478,8 @@ export default function ChangeWizard({ household, onApply, onReset }: ChangeWiza
             {(eventType === 'having_baby' || eventType === 'ending_pregnancy') && !married && (
               <p className="text-sm text-gray-600">
                 {eventType === 'having_baby'
-                  ? 'Click Apply to see how pregnancy affects your coverage.'
-                  : 'Click Apply to see how the end of pregnancy affects your coverage.'}
+                  ? 'Click Run scenario to see how pregnancy affects your coverage.'
+                  : 'Click Run scenario to see how the end of pregnancy affects your coverage.'}
               </p>
             )}
           </div>
@@ -494,10 +492,6 @@ export default function ChangeWizard({ household, onApply, onReset }: ChangeWiza
               Run scenario
             </button>
           </div>
-
-          <p className="text-[11px] text-gray-400 mt-3">
-            Modeling: <b className="text-gray-600">{selectedLabel}</b>
-          </p>
         </form>
       )}
       </div>

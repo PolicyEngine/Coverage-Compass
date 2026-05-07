@@ -1,40 +1,45 @@
-# Healthcare Crossroads
+# Coverage Compass
 
-Explore how common household changes affect health coverage, marketplace subsidies, and related healthcare support.
+Model how life events affect a household's healthcare coverage and monthly out-of-pocket cost across **Medicaid**, **CHIP**, and the **ACA marketplace**.
 
-## Installation
+Live: https://coverage-compass-policy-engine.vercel.app/
+
+## What it covers
+
+- ACA marketplace plans (silver/bronze tier comparison, premium tax credit, full unsubsidized cost)
+- Medicaid eligibility per person (state-specific thresholds for adults vs. kids)
+- CHIP eligibility plus enrollment fees in the 17 states that charge them
+- Life events: income changes, moving (state or area), losing job-based coverage, becoming pregnant, ending pregnancy
+
+Households with employer-sponsored insurance are screened out at the start because we don't model employer premium contributions.
+
+## Architecture
+
+- **Frontend** (`frontend/`): Next.js + Tailwind, deployed on Vercel
+- **Backend** (`healthcare_crossroads/`): Flask + PolicyEngine US, deployed on Modal as serverless functions
+
+## Local development
 
 ```bash
-pip install -e .
+# Backend (Flask)
+uv venv --python 3.11
+source .venv/bin/activate
+uv pip install -e .
+python -m healthcare_crossroads.api  # serves on :8080
+
+# Frontend (Next.js)
+cd frontend
+npm install
+echo "BACKEND_URL=http://localhost:8080" > .env.local
+npm run dev  # serves on :3000
 ```
 
-## Quick Start
+## Deploying
 
-```python
-from healthcare_crossroads import Household, Person, compare
-from healthcare_crossroads.events import LosingESI
+Frontend (Vercel): `cd frontend && vercel --prod` after each frontend change.
+Backend (Modal): `modal deploy modal_app.py` after any change under `healthcare_crossroads/`.
 
-# Define a household
-household = Household(
-    state="CA",
-    members=[Person(age=30, employment_income=50000)],
-)
-
-# Simulate losing employer coverage
-result = compare(household, LosingESI())
-
-print(result.healthcare_after.to_dict())
-
-# Get JSON-serializable output for APIs
-api_response = result.to_dict()
-```
-
-## Focus
-
-- Coverage transitions after losing employer-sponsored insurance
-- Household changes like marriage, divorce, childbirth, and moving states
-- Income changes that affect Medicaid, CHIP, and ACA marketplace support
-- Conference-friendly frontend for showing before/after healthcare outcomes
+`git push` does not auto-deploy either side until the Vercel project's Root Directory is set to `frontend`.
 
 ## License
 
