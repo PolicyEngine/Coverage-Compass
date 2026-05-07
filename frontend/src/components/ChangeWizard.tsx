@@ -100,9 +100,8 @@ export default function ChangeWizard({ household, onApply, onReset }: ChangeWiza
   // Event-specific state (over-allocated; only the relevant fields per event are used)
   const married = isMarried(household);
 
-  // changing_income
+  // changing_income (household-level total monthly income)
   const [yourIncomeMo, setYourIncomeMo] = useState(String(Math.round(household.income / 12)));
-  const [partnerIncomeMo, setPartnerIncomeMo] = useState(String(Math.round(household.spouseIncome / 12)));
 
   // moving_states
   const [newState, setNewState] = useState('');
@@ -145,7 +144,6 @@ export default function ChangeWizard({ household, onApply, onReset }: ChangeWiza
       case 'changing_income':
         return {
           newIncome: (parseInt(yourIncomeMo) || 0) * 12,
-          ...(married ? { newSpouseIncome: (parseInt(partnerIncomeMo) || 0) * 12 } : {}),
         };
       case 'moving_states':
         return {
@@ -181,10 +179,8 @@ export default function ChangeWizard({ household, onApply, onReset }: ChangeWiza
   function canApply(): boolean {
     switch (eventType) {
       case 'changing_income':
-        if (yourIncomeMo === '' || (married && partnerIncomeMo === '')) return false;
-        const sameYour = (parseInt(yourIncomeMo) || 0) * 12 === household.income;
-        const sameSpouse = (parseInt(partnerIncomeMo) || 0) * 12 === household.spouseIncome;
-        return !(sameYour && (!married || sameSpouse));
+        if (yourIncomeMo === '') return false;
+        return (parseInt(yourIncomeMo) || 0) * 12 !== household.income;
       case 'moving_states':
         // Allow same-state moves when only the ZIP changes (different area within the state).
         return (newState !== '' && newState !== household.state) ||
@@ -289,18 +285,10 @@ export default function ChangeWizard({ household, onApply, onReset }: ChangeWiza
 
           <div className="space-y-4">
             {eventType === 'changing_income' && (
-              <>
-                <div>
-                  <FieldLabel>Your new monthly income</FieldLabel>
-                  <MoneyInput value={yourIncomeMo} onChange={setYourIncomeMo} autoFocus />
-                </div>
-                {married && (
-                  <div>
-                    <FieldLabel>Partner&apos;s new monthly income</FieldLabel>
-                    <MoneyInput value={partnerIncomeMo} onChange={setPartnerIncomeMo} />
-                  </div>
-                )}
-              </>
+              <div>
+                <FieldLabel>New household monthly income</FieldLabel>
+                <MoneyInput value={yourIncomeMo} onChange={setYourIncomeMo} autoFocus />
+              </div>
             )}
 
             {eventType === 'moving_states' && (

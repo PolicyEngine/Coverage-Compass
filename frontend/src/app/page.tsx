@@ -405,14 +405,10 @@ function PartialSummary({ partial }: { partial: Partial<Household> }) {
     });
   }
   if (partial.income !== undefined && partial.income > 0) {
-    const married =
-      partial.filingStatus === 'married_jointly' || partial.filingStatus === 'married_separately';
-    const yours = `$${Math.round(partial.income / 12).toLocaleString()}/mo`;
-    const partner =
-      married && partial.spouseIncome !== undefined && partial.spouseIncome > 0
-        ? ` & $${Math.round(partial.spouseIncome / 12).toLocaleString()}/mo`
-        : '';
-    items.push({ label: 'Income', value: yours + partner });
+    items.push({
+      label: 'Income',
+      value: `$${Math.round(partial.income / 12).toLocaleString()}/mo`,
+    });
   }
   if (partial.hasESI !== undefined || partial.spouseHasESI !== undefined) {
     items.push({
@@ -516,16 +512,8 @@ function describeScenarioChanges(
   switch (eventType) {
     case 'changing_income': {
       const newIncome = (params.newIncome as number) ?? household.income;
-      const newSpouseIncome = (params.newSpouseIncome as number) ?? household.spouseIncome;
       if (newIncome !== household.income) {
-        out.push({ label: 'Your income', before: fmt(household.income), after: fmt(newIncome) });
-      }
-      if (married && newSpouseIncome !== household.spouseIncome) {
-        out.push({
-          label: "Partner's income",
-          before: fmt(household.spouseIncome),
-          after: fmt(newSpouseIncome),
-        });
+        out.push({ label: 'Income', before: fmt(household.income), after: fmt(newIncome) });
       }
       return out;
     }

@@ -34,7 +34,6 @@ export default function HouseholdWizard({ onComplete, onBack, onPartialChange }:
   const [partnerAge, setPartnerAge] = useState<string>('');
 
   const [monthlyIncome, setMonthlyIncome] = useState<string>('');
-  const [partnerMonthlyIncome, setPartnerMonthlyIncome] = useState<string>('');
 
   const [hasESI, setHasESI] = useState<boolean>(false);
   const [spouseHasESI, setSpouseHasESI] = useState<boolean>(false);
@@ -80,8 +79,6 @@ export default function HouseholdWizard({ onComplete, onBack, onPartialChange }:
     if (!isNaN(myPartnerAge) && myPartnerAge > 0) partial.spouseAge = myPartnerAge;
     const myIncome = parseFloat(monthlyIncome.replace(/,/g, ''));
     if (!isNaN(myIncome) && myIncome > 0) partial.income = myIncome * 12;
-    const myPartnerIncome = parseFloat(partnerMonthlyIncome.replace(/,/g, ''));
-    if (!isNaN(myPartnerIncome) && myPartnerIncome > 0) partial.spouseIncome = myPartnerIncome * 12;
     if (esiTouched) {
       partial.hasESI = hasESI;
       partial.spouseHasESI = spouseHasESI;
@@ -140,8 +137,11 @@ export default function HouseholdWizard({ onComplete, onBack, onPartialChange }:
   function handleComplete() {
     const myAge = parseInt(age, 10) || 18;
     const myPartnerAge = married ? (parseInt(partnerAge, 10) || myAge) : myAge;
+    // Total household income, all assigned to the head's employment_income.
+    // For joint filers PolicyEngine aggregates head+spouse anyway; we don't
+    // try to split because the user just gives us one number.
     const income = (parseFloat(monthlyIncome) || 0) * 12;
-    const spouseIncome = married ? (parseFloat(partnerMonthlyIncome) || 0) * 12 : 0;
+    const spouseIncome = 0;
     const numericChildAges = childAges.map((a) => (a === '' ? 0 : a));
 
     // Auto-derive filing status: a single filer with at least one dependent
@@ -175,7 +175,7 @@ export default function HouseholdWizard({ onComplete, onBack, onPartialChange }:
 
   const step1Valid = zip.length === 5 && detectedState !== null;
   const step3Valid = age !== '' && parseInt(age, 10) >= 18 && (!married || (partnerAge !== '' && parseInt(partnerAge, 10) >= 18));
-  const step4Valid = monthlyIncome !== '' && (!married || partnerMonthlyIncome !== '');
+  const step4Valid = monthlyIncome !== '';
 
   return (
     <div className="max-w-2xl mx-auto">
@@ -335,11 +335,11 @@ export default function HouseholdWizard({ onComplete, onBack, onPartialChange }:
 
         {step === 4 && (
           <form onSubmit={(e) => { e.preventDefault(); if (step4Valid) goNext(); }}>
-            <h2 className="text-2xl font-bold text-gray-900 mb-2">What&apos;s your monthly income?</h2>
-            <p className="text-sm text-gray-500 mb-6">Before taxes. Include wages, self-employment, etc.</p>
+            <h2 className="text-2xl font-bold text-gray-900 mb-2">What&apos;s your household&apos;s monthly income?</h2>
+            <p className="text-sm text-gray-500 mb-6">Before taxes. Add up everyone in the household — wages, self-employment, etc.</p>
             <div className="flex flex-col gap-4">
               <div>
-                <label className="label">Your monthly income</label>
+                <label className="label">Total household monthly income</label>
                 <div className="currency-input">
                   <span className="currency-prefix">$</span>
                   <input
@@ -353,22 +353,6 @@ export default function HouseholdWizard({ onComplete, onBack, onPartialChange }:
                   />
                 </div>
               </div>
-              {married && (
-                <div>
-                  <label className="label">Your partner&apos;s monthly income</label>
-                  <div className="currency-input">
-                    <span className="currency-prefix">$</span>
-                    <input
-                      type="number"
-                      min={0}
-                      value={partnerMonthlyIncome}
-                      onChange={(e) => setPartnerMonthlyIncome(e.target.value)}
-                      className="currency-field text-lg"
-                      placeholder=""
-                    />
-                  </div>
-                </div>
-              )}
             </div>
             <div className="flex justify-between mt-8">
               <button
