@@ -454,7 +454,7 @@ export default function ResultsView({ result, eventType, onTryAnother, onReset }
     financialRows.push({
       metric: {
         name: 'marketplace_net_premium',
-        label: 'Your cost (after credit)',
+        label: 'Net marketplace premium',
         before: tierNetBefore,
         after: tierNetAfter,
         category: 'state_credit',
