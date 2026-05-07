@@ -283,7 +283,7 @@ export default function ChangeWizard({ household, onApply, onReset }: ChangeWiza
 
           <div className="space-y-4">
             {eventType === 'changing_income' && (
-              <div>
+              <div className="max-w-xs">
                 <FieldLabel>New household monthly income</FieldLabel>
                 <MoneyInput value={yourIncomeMo} onChange={setYourIncomeMo} autoFocus />
               </div>
@@ -291,7 +291,7 @@ export default function ChangeWizard({ household, onApply, onReset }: ChangeWiza
 
             {eventType === 'moving_states' && (
               <>
-                <div>
+                <div className="max-w-sm">
                   <FieldLabel>New state (optional, keep same to move within state)</FieldLabel>
                   <select
                     value={newState}
@@ -307,7 +307,7 @@ export default function ChangeWizard({ household, onApply, onReset }: ChangeWiza
                     ))}
                   </select>
                 </div>
-                <div>
+                <div className="max-w-xs">
                   <FieldLabel>New ZIP (optional)</FieldLabel>
                   <input
                     type="text"

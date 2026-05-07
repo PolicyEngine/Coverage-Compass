@@ -207,7 +207,7 @@ export default function HouseholdWizard({ onComplete, onBack, onPartialChange }:
                 maxLength={5}
                 value={zip}
                 onChange={(e) => handleZipChange(e.target.value)}
-                className="input-field text-center text-2xl tracking-widest py-4"
+                className="input-field text-center text-2xl tracking-widest py-4 max-w-[12rem]"
                 placeholder=""
                 autoFocus
               />
@@ -278,7 +278,7 @@ export default function HouseholdWizard({ onComplete, onBack, onPartialChange }:
             <h2 className="text-2xl font-bold text-gray-900 mb-2">How old are you?</h2>
             <p className="text-sm text-gray-500 mb-6" />
             <div className="flex flex-col gap-4">
-              <div>
+              <div className="max-w-xs">
                 <label className="label">Your age</label>
                 <input
                   type="number"
@@ -298,7 +298,7 @@ export default function HouseholdWizard({ onComplete, onBack, onPartialChange }:
                 />
               </div>
               {married && (
-                <div>
+                <div className="max-w-xs">
                   <label className="label">How old is your partner?</label>
                   <input
                     type="number"
@@ -342,7 +342,7 @@ export default function HouseholdWizard({ onComplete, onBack, onPartialChange }:
             <h2 className="text-2xl font-bold text-gray-900 mb-2">What&apos;s your household&apos;s monthly income?</h2>
             <p className="text-sm text-gray-500 mb-6">Before taxes. Add up everyone in the household: wages, self-employment, etc.</p>
             <div className="flex flex-col gap-4">
-              <div>
+              <div className="max-w-xs">
                 <label className="label">Total household monthly income</label>
                 <div className="currency-input">
                   <span className="currency-prefix">$</span>
@@ -459,7 +459,7 @@ export default function HouseholdWizard({ onComplete, onBack, onPartialChange }:
           <form onSubmit={(e) => { e.preventDefault(); goNext(); }}>
             <h2 className="text-2xl font-bold text-gray-900 mb-2">How old are your children?</h2>
             <p className="text-sm text-gray-500 mb-6" />
-            <div className="flex flex-col gap-3">
+            <div className="flex flex-col gap-3 max-w-md">
               {childAges.map((childAge, index) => (
                 <div key={index} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
                   <span className="text-sm font-medium text-gray-600 w-16 shrink-0">
