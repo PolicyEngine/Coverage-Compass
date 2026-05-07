@@ -36,14 +36,6 @@ export default function Header() {
 
           <nav className="flex items-center gap-1">
             <a
-              href="https://policyengine.org"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="px-3 py-2 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-50 rounded-lg transition-colors"
-            >
-              PolicyEngine
-            </a>
-            <a
               href="https://github.com/PolicyEngine/Coverage-Compass"
               target="_blank"
               rel="noopener noreferrer"
