@@ -134,7 +134,7 @@ export default function HouseholdWizard({ onComplete, onBack, onPartialChange }:
     });
   }
 
-  function handleComplete() {
+  function handleComplete(overrides: { pregnantMember?: 'head' | 'spouse' | null } = {}) {
     const myAge = parseInt(age, 10) || 18;
     const myPartnerAge = married ? (parseInt(partnerAge, 10) || myAge) : myAge;
     // Total household income, all assigned to the head's employment_income.
@@ -143,6 +143,10 @@ export default function HouseholdWizard({ onComplete, onBack, onPartialChange }:
     const income = (parseFloat(monthlyIncome) || 0) * 12;
     const spouseIncome = 0;
     const numericChildAges = childAges.map((a) => (a === '' ? 0 : a));
+    // Allow callers to pass a fresh pregnantMember value because the
+    // setPregnantMember setter above won't have flushed yet.
+    const finalPregnantMember =
+      overrides.pregnantMember !== undefined ? overrides.pregnantMember : pregnantMember;
 
     // Auto-derive filing status: a single filer with at least one dependent
     // qualifies for head-of-household, which has more favorable brackets.
@@ -165,7 +169,7 @@ export default function HouseholdWizard({ onComplete, onBack, onPartialChange }:
       spouseHasESI,
       childAges: numericChildAges,
       year: 2026,
-      pregnantMember: pregnantMember ?? null,
+      pregnantMember: finalPregnantMember ?? null,
     };
 
     onComplete(household);
@@ -535,7 +539,11 @@ export default function HouseholdWizard({ onComplete, onBack, onPartialChange }:
                     <button
                       key={opt.label}
                       type="button"
-                      onClick={() => { setPregnantMember(opt.value); setPregnancyTouched(true); }}
+                      onClick={() => {
+                        setPregnantMember(opt.value);
+                        setPregnancyTouched(true);
+                        handleComplete({ pregnantMember: opt.value });
+                      }}
                       className={`w-full text-left px-4 py-3 rounded-xl border-2 font-medium transition-all mb-2 ${
                         pregnancyTouched && pregnantMember === opt.value
                           ? 'border-[#319795] bg-[#E6FFFA] text-[#285E61]'
@@ -557,7 +565,11 @@ export default function HouseholdWizard({ onComplete, onBack, onPartialChange }:
                     <button
                       key={opt.label}
                       type="button"
-                      onClick={() => { setPregnantMember(opt.value); setPregnancyTouched(true); }}
+                      onClick={() => {
+                        setPregnantMember(opt.value);
+                        setPregnancyTouched(true);
+                        handleComplete({ pregnantMember: opt.value });
+                      }}
                       className={`w-full text-left px-4 py-3 rounded-xl border-2 font-medium transition-all mb-2 ${
                         pregnancyTouched && pregnantMember === opt.value
                           ? 'border-[#319795] bg-[#E6FFFA] text-[#285E61]'
@@ -577,14 +589,6 @@ export default function HouseholdWizard({ onComplete, onBack, onPartialChange }:
                 className="btn btn-ghost"
               >
                 Back
-              </button>
-              <button
-                type="button"
-                onClick={handleComplete}
-                disabled={false}
-                className="btn btn-primary"
-              >
-                Done
               </button>
             </div>
           </div>

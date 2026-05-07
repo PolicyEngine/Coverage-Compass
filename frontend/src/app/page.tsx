@@ -372,9 +372,6 @@ export default function Home() {
           </div>
         )}
 
-        <footer className="mt-10 text-xs text-gray-400">
-          <span>Powered by <a href="https://policyengine.org" target="_blank" rel="noopener noreferrer" className="text-[#319795] font-medium">PolicyEngine</a></span>
-        </footer>
       </div>
     </div>
   );
