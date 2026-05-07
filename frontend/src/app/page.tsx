@@ -614,6 +614,18 @@ function getHeroHeadline(eventType: LifeEventType, result: SimulationResult): st
   if (!anyMarketplaceBefore && anyMarketplaceAfter) return `${subject} moves you onto the ACA marketplace.`;
   if (anyMarketplaceBefore && !anyMarketplaceAfter) return `${subject} moves you off the ACA marketplace.`;
 
-  // Fallback when no salient transition: describe the change without overpromising.
+  // Detect a fully-unchanged outcome so we don't promise a "change" that
+  // didn't happen. Compare before/after person-by-person.
+  const beforePeopleByLabel = new Map(beforePeople.map((p) => [p.label, p.coverage]));
+  const afterPeopleByLabel = new Map(afterPeople.map((p) => [p.label, p.coverage]));
+  const allLabels = new Set([...beforePeopleByLabel.keys(), ...afterPeopleByLabel.keys()]);
+  const coverageUnchanged = Array.from(allLabels).every(
+    (label) => beforePeopleByLabel.get(label) === afterPeopleByLabel.get(label),
+  );
+  if (coverageUnchanged) {
+    return `${subject} doesn't change your coverage.`;
+  }
+
+  // Fallback when there's some shift we don't explicitly handle.
   return `${subject} changes your coverage picture.`;
 }

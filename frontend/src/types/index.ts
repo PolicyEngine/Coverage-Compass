@@ -163,7 +163,7 @@ export const LIFE_EVENTS: LifeEvent[] = [
   },
   {
     type: 'moving_states',
-    label: 'Moving States',
+    label: 'Move',
     description: 'Compare healthcare support before and after relocating',
   },
   {
