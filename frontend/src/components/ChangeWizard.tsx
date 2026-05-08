@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { Household, LifeEventType, US_STATES, getStateFromZip } from '@/types';
+import * as gtag from '@/lib/gtag';
 
 interface ChangeWizardProps {
   household: Household;
@@ -127,6 +128,7 @@ export default function ChangeWizard({ household, onApply, onReset }: ChangeWiza
   function pickEvent(t: LifeEventType) {
     setEventType(t);
     setStep(2);
+    gtag.trackLifeEventSelected(t);
   }
 
   function goBack() {

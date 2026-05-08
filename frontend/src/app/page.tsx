@@ -5,6 +5,7 @@ import HouseholdWizard from '@/components/HouseholdWizard';
 import ChangeWizard from '@/components/ChangeWizard';
 import ResultsView from '@/components/ResultsView';
 import { Household, LifeEventType, SimulationResult, LIFE_EVENTS } from '@/types';
+import * as gtag from '@/lib/gtag';
 
 interface SavedScenario {
   id: string;
@@ -93,6 +94,9 @@ export default function Home() {
       const data = await response.json();
       if (data.error) throw new Error(data.error);
       if (!data.before || !data.after) throw new Error('Invalid response from simulation');
+      const netBefore = data.acaPremiums?.before?.silverNet ?? 0;
+      const netAfter = data.acaPremiums?.after?.silverNet ?? 0;
+      gtag.trackSimulationComplete(event, (netAfter - netBefore) / 12);
       const id = newScenarioId();
       setScenarios((prev) => [...prev, { id, event, params, result: data }]);
       setCurrentScenarioId(id);
@@ -101,7 +105,9 @@ export default function Home() {
       setShareUrl(url);
       window.history.replaceState({}, '', `?s=${encoded}`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Something went wrong');
+      const msg = err instanceof Error ? err.message : 'Something went wrong';
+      gtag.trackSimulationError(event, msg);
+      setError(msg);
     } finally {
       setIsLoading(false);
     }
@@ -143,19 +149,20 @@ export default function Home() {
     setScenarios([]);
     setCurrentScenarioId(null);
     setError(null);
-    // Warm the Modal container in the background so the Apply spinner is
-    // shorter (avoids paying a cold start on the /api/simulate call).
+    gtag.trackWizardComplete(h.state, h.filingStatus);
     warmBackend(h);
   };
 
   const handleRun = () => {
     if (household && selectedEvent) {
+      gtag.trackSimulationRun(selectedEvent, household.state);
       runSimulation(household, selectedEvent, eventParams);
     }
   };
 
   const handleShare = async () => {
     if (!shareUrl) return;
+    gtag.trackShareClick();
     try { await navigator.clipboard.writeText(shareUrl); } catch {
       const input = document.createElement('input');
       input.value = shareUrl;
@@ -169,8 +176,7 @@ export default function Home() {
   };
 
   const handleTryAnother = () => {
-    // Keep household + scenario history. Clear the active event/result so
-    // the user can model a new what-if.
+    gtag.trackTryAnother();
     setSelectedEvent(null);
     setEventParams({});
     setCurrentScenarioId(null);
@@ -180,6 +186,7 @@ export default function Home() {
   };
 
   const handleReset = () => {
+    gtag.trackReset();
     setHousehold(null);
     setSelectedEvent(null);
     setEventParams({});

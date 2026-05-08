@@ -28,9 +28,9 @@ export default function Header() {
               </svg>
             </div>
             <div>
-              <h1 className="text-lg font-semibold text-gray-900 tracking-tight">
+              <span className="text-lg font-semibold text-gray-900 tracking-tight">
                 Coverage Compass
-              </h1>
+              </span>
             </div>
           </Link>
 
