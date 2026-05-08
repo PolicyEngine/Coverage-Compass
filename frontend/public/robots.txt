@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /
+Sitemap: https://coverage-compass.policyengine.org/sitemap.xml
