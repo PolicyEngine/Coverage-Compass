@@ -10,14 +10,17 @@ const inter = Inter({
   display: "swap",
 });
 
+const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "/us/coverage-compass";
+const assetPath = (path: `/${string}`) => `${basePath}${path}`;
+
 export const metadata: Metadata = {
   metadataBase: new URL("https://coverage-compass.policyengine.org"),
   title: "Coverage Compass | PolicyEngine",
   description:
     "See how life events like income changes, pregnancy, or losing employer coverage affect your ACA marketplace premiums, Medicaid eligibility, and CHIP. Model your household free with PolicyEngine.",
   icons: {
-    icon: [{ url: "/icon.svg", type: "image/svg+xml" }],
-    shortcut: "/icon.svg",
+    icon: [{ url: assetPath("/icon.svg"), type: "image/svg+xml" }],
+    shortcut: assetPath("/icon.svg"),
   },
   alternates: {
     canonical: "/",
@@ -30,7 +33,7 @@ export const metadata: Metadata = {
     url: "/",
     images: [
       {
-        url: "/og-image.png",
+        url: assetPath("/og-image.png"),
         width: 1200,
         height: 630,
         alt: "Coverage Compass — see how life events change your healthcare coverage",
@@ -42,7 +45,7 @@ export const metadata: Metadata = {
     title: "Coverage Compass | PolicyEngine",
     description:
       "See how life events like income changes, pregnancy, or losing employer coverage affect your ACA marketplace premiums, Medicaid eligibility, and CHIP.",
-    images: ["/og-image.png"],
+    images: [assetPath("/og-image.png")],
   },
   other: {
     "theme-color": "#319795",
