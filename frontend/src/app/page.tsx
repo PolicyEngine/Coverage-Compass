@@ -14,6 +14,14 @@ interface SavedScenario {
   result: SimulationResult;
 }
 
+function appPath(path: string): string {
+  return `${process.env.NEXT_PUBLIC_BASE_PATH || ''}${path}`;
+}
+
+function appUrl(path: string): string {
+  return new URL(appPath(path), window.location.origin).toString();
+}
+
 function newScenarioId(): string {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }
@@ -65,7 +73,7 @@ export default function Home() {
   // so the subsequent /api/simulate call on Apply doesn't pay a cold start.
   const warmBackend = useCallback(async (h: Household) => {
     try {
-      await fetch('/api/baseline', {
+      await fetch(appPath('/api/baseline'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ household: h }),
@@ -83,7 +91,7 @@ export default function Home() {
     setIsLoading(true);
     setError(null);
     try {
-      const response = await fetch('/api/simulate', {
+      const response = await fetch(appPath('/api/simulate'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -101,9 +109,10 @@ export default function Home() {
       setScenarios((prev) => [...prev, { id, event, params, result: data }]);
       setCurrentScenarioId(id);
       const encoded = encodeScenario(h, event, params);
-      const url = `${window.location.origin}?s=${encoded}`;
+      const path = `?s=${encoded}`;
+      const url = appUrl(path);
       setShareUrl(url);
-      window.history.replaceState({}, '', `?s=${encoded}`);
+      window.history.replaceState({}, '', appPath(path));
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Something went wrong';
       gtag.trackSimulationError(event, msg);
@@ -119,8 +128,9 @@ export default function Home() {
     setEventParams(s.params);
     setError(null);
     const encoded = encodeScenario(h, s.event, s.params);
-    setShareUrl(`${window.location.origin}?s=${encoded}`);
-    window.history.replaceState({}, '', `?s=${encoded}`);
+    const path = `?s=${encoded}`;
+    setShareUrl(appUrl(path));
+    window.history.replaceState({}, '', appPath(path));
   }, []);
 
   const removeScenario = useCallback((id: string) => {
