@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
+import { PolicyEngineShell } from "@policyengine/ui-kit/layout";
+import "@policyengine/ui-kit/styles.css";
 import "./globals.css";
 import Header from "@/components/Header";
 import GoogleAnalytics from "@/components/GoogleAnalytics";
@@ -86,8 +88,10 @@ export default function RootLayout({
           dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
         />
         <GoogleAnalytics />
-        <Header />
-        <main>{children}</main>
+        <PolicyEngineShell country="us">
+          <Header />
+          <main>{children}</main>
+        </PolicyEngineShell>
       </body>
     </html>
   );
