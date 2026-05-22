@@ -37,6 +37,7 @@ function decodeScenario(encoded: string): { household: Household; event: LifeEve
         hasESI: data.h.hasESI ?? false,
         spouseHasESI: data.h.spouseHasESI ?? false,
         year: data.h.year ?? 2026,
+        pregnantMember: data.h.pregnantMember ?? null,
       };
       return { household, event: data.e, params: data.p || {} };
     }
@@ -561,7 +562,14 @@ function describeScenarioChanges(
       return out;
     }
     case 'ending_pregnancy':
-      out.push({ label: 'Pregnancy', text: 'ending' });
+      out.push({
+        label: 'Pregnancy',
+        text: 'ending',
+      });
+      out.push({
+        label: 'New babies',
+        text: `${(params.newbornCount as number | undefined) ?? 0} added`,
+      });
       return out;
     default:
       return out;

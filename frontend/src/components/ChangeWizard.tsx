@@ -15,6 +15,9 @@ interface EventOption {
   description: string;
 }
 
+const BABY_COUNT_OPTIONS = [0, 1, 2, 3] as const;
+type BabyCount = typeof BABY_COUNT_OPTIONS[number];
+
 function isMarried(h: Household) {
   return h.filingStatus === 'married_jointly' || h.filingStatus === 'married_separately';
 }
@@ -121,6 +124,7 @@ export default function ChangeWizard({ household, onApply, onReset }: ChangeWiza
   const [pregnantMemberIndex, setPregnantMemberIndex] = useState<0 | 1>(
     household.pregnantMember === 'spouse' ? 1 : 0,
   );
+  const [newbornCount, setNewbornCount] = useState<BabyCount>(1);
 
   const events = getAvailableEvents(household);
 
@@ -169,7 +173,7 @@ export default function ChangeWizard({ household, onApply, onReset }: ChangeWiza
       case 'having_baby':
         return { pregnantMemberIndex };
       case 'ending_pregnancy':
-        return { pregnantMemberIndex };
+        return { pregnantMemberIndex, newbornCount };
       default:
         return {};
     }
@@ -482,6 +486,10 @@ export default function ChangeWizard({ household, onApply, onReset }: ChangeWiza
                   : 'Click Run scenario to see how the end of pregnancy affects your coverage.'}
               </p>
             )}
+
+            {eventType === 'ending_pregnancy' && (
+              <BabyCountSelector value={newbornCount} onChange={setNewbornCount} />
+            )}
           </div>
 
           <div className="flex justify-between mt-6">
@@ -494,6 +502,37 @@ export default function ChangeWizard({ household, onApply, onReset }: ChangeWiza
           </div>
         </form>
       )}
+      </div>
+    </div>
+  );
+}
+
+function BabyCountSelector({
+  value,
+  onChange,
+}: {
+  value: BabyCount;
+  onChange: (value: BabyCount) => void;
+}) {
+  return (
+    <div className="max-w-xs">
+      <FieldLabel>New babies joining household</FieldLabel>
+      <div className="grid grid-cols-4 gap-2">
+        {BABY_COUNT_OPTIONS.map((count) => (
+          <button
+            key={count}
+            type="button"
+            onClick={() => onChange(count)}
+            className={`h-10 rounded-lg border-2 text-sm font-semibold tabular-nums transition-all ${
+              value === count
+                ? 'border-[#319795] bg-[#E6FFFA] text-[#285E61]'
+                : 'border-gray-200 text-gray-600 hover:border-[#319795]/50'
+            }`}
+            aria-pressed={value === count}
+          >
+            {count}
+          </button>
+        ))}
       </div>
     </div>
   );

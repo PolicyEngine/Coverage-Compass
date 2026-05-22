@@ -12,15 +12,6 @@ interface ResultsViewProps {
   onReset: () => void;       // full reset back to the wizard
 }
 
-// Per-month financial rows we surface in the statement table.
-// CHIP and Medicaid program-cost dollar amounts are intentionally omitted:
-// they're shown via per-person coverage pills above; the dollar value to
-// the family (premium contribution) isn't directly modeled.
-const FINANCIAL_METRIC_NAMES = new Set([
-  'premium_tax_credit',
-  'marketplace_net_premium',
-]);
-
 // Each metric's category tag, for the small label shown next to the row name.
 const METRIC_CATEGORY: Record<string, string> = {
   full_premium: 'premium',
@@ -46,10 +37,6 @@ function formatCurrency(value: number): string {
     currency: 'USD',
     maximumFractionDigits: 0,
   }).format(value);
-}
-
-function formatMonthly(annual: number): string {
-  return formatCurrency(annual / 12);
 }
 
 function getCoverageLabel(type: string | null): string {
@@ -361,6 +348,9 @@ function MobileMetricCard({
 }
 
 export default function ResultsView({ result, eventType, onTryAnother, onReset }: ResultsViewProps) {
+  const [selectedTier, setSelectedTier] = useState<Tier>('silver');
+  const [showBreakdown, setShowBreakdown] = useState(false);
+
   if (!result?.before || !result?.after) {
     return (
       <div className="card p-8 text-center">
@@ -375,9 +365,6 @@ export default function ResultsView({ result, eventType, onTryAnother, onReset }
       </div>
     );
   }
-
-  const [selectedTier, setSelectedTier] = useState<Tier>('silver');
-  const [showBreakdown, setShowBreakdown] = useState(false);
 
   const metrics = result.before.metrics || [];
 
