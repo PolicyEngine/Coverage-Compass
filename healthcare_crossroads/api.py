@@ -9,7 +9,7 @@ from flask import Flask, jsonify, request
 from flask_cors import CORS
 
 from .aca_data import get_bronze_silver_ratio
-from .compare import compare, compare_multiple, run_baseline
+from .compare import CombinedEvent, compare, compare_multiple, run_baseline
 from .events import (
     ChildAgingOut,
     Divorce,
@@ -125,11 +125,28 @@ def _divorce_children_leaving(params: dict, household: Household) -> list[int] |
     return leaving or None
 
 
+def _ending_pregnancy_event(params: dict) -> LifeEvent:
+    """Build an ending-pregnancy event, optionally adding newborn children."""
+    member_index = int(params.get("pregnantMemberIndex", 0))
+    newborn_count = int(params.get("newbornCount", 0))
+
+    if newborn_count < 0 or newborn_count > 3:
+        raise ValueError("Newborn count must be between 0 and 3")
+
+    events: list[LifeEvent] = [EndingPregnancy(member_index=member_index)]
+    events.extend(NewChild(age=0) for _ in range(newborn_count))
+
+    if len(events) == 1:
+        return events[0]
+
+    return CombinedEvent(events=events)
+
+
 def create_event_from_request(event_type: str, params: dict, household: Household):
     """Convert frontend event type to backend LifeEvent."""
     event_map = {
         "having_baby": lambda: Pregnancy(member_index=int(params.get("pregnantMemberIndex", 0))),
-        "ending_pregnancy": lambda: EndingPregnancy(member_index=int(params.get("pregnantMemberIndex", 0))),
+        "ending_pregnancy": lambda: _ending_pregnancy_event(params),
         "moving_states": lambda: Move(new_state=params.get("newState", "TX"), new_zip_code=params.get("newZipCode") or None),
         "getting_married": lambda: Marriage(
             spouse_age=params.get("spouseAge", 30),
