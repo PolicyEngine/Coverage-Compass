@@ -24,7 +24,10 @@ function encodeScenario(household: Household, event: LifeEventType, params: Reco
 function decodeScenario(encoded: string): { household: Household; event: LifeEventType; params: Record<string, unknown> } | null {
   try {
     const data = JSON.parse(atob(encoded));
-    if (data.h && data.e) {
+    // Only accept event types the app actually supports — a crafted link
+    // with an unknown type would otherwise render an "undefined …"
+    // headline and hit the backend with an unvetted event.
+    if (data.h && LIFE_EVENTS.some((ev) => ev.type === data.e)) {
       const household: Household = {
         state: data.h.state || 'CA',
         zipCode: data.h.zipCode || undefined,
@@ -126,6 +129,8 @@ export default function Home() {
   }, []);
 
   const restoreScenario = useCallback((s: SavedScenario, h: Household) => {
+    requestSeq.current++; // an in-flight simulation must not override this restore
+    setIsLoading(false);
     setCurrentScenarioId(s.id);
     setSelectedEvent(s.event);
     setEventParams(s.params);

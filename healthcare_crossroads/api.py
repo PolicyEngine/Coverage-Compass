@@ -9,7 +9,7 @@ from flask import Flask, jsonify, request
 from flask_cors import CORS
 
 from .aca_data import get_bronze_silver_ratio
-from .compare import compare, compare_multiple, run_baseline
+from .compare import SimulationComputeError, compare, compare_multiple, run_baseline
 from .events import (
     ChildAgingOut,
     Divorce,
@@ -406,6 +406,10 @@ def simulate():
         return jsonify(format_result_for_frontend(result))
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
+    except SimulationComputeError as e:
+        # Engine-side failure, not a client error: message is user-safe,
+        # details were already logged where it was raised.
+        return jsonify({"error": str(e)}), 500
     except Exception:
         # Don't leak internal exception details (file paths, PolicyEngine
         # internals) to clients; the traceback goes to the server log.
@@ -428,6 +432,8 @@ def baseline():
         return jsonify(run_baseline_response(household_dict))
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
+    except SimulationComputeError as e:
+        return jsonify({"error": str(e)}), 500
     except Exception:
         app.logger.exception("Baseline simulation failed")
         return jsonify({"error": "Baseline simulation failed due to an internal error."}), 500

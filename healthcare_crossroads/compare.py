@@ -2,11 +2,22 @@
 
 from __future__ import annotations
 
+import logging
 from copy import deepcopy
 from dataclasses import dataclass, field
 from typing import Any
 
 from policyengine_us import Simulation
+
+logger = logging.getLogger(__name__)
+
+
+class SimulationComputeError(RuntimeError):
+    """A core output variable could not be computed for a household.
+
+    The message is safe to show to end users; the underlying exception is
+    logged server-side only.
+    """
 
 from .events.base import LifeEvent
 from .events.divorce import Divorce
@@ -301,11 +312,23 @@ class ComparisonResult:
         return result
 
 
-def _run_simulation(situation: dict[str, Any], year: int) -> tuple[dict[str, float], Simulation]:
+def _run_simulation(
+    situation: dict[str, Any],
+    year: int,
+    strict: bool = True,
+) -> tuple[dict[str, float], Simulation]:
     """Run a PolicyEngine simulation and extract key outputs.
 
     Returns both the aggregated results and the simulation object for
     further per-person analysis.
+
+    With strict=True (the default), a core variable failing to compute
+    raises SimulationComputeError instead of silently reporting $0 — an
+    all-zeros response is indistinguishable from a real "no coverage,
+    no cost" answer. Counterfactual side-simulations (marriage/divorce)
+    pass strict=False because their aggregated results are discarded;
+    only the per-person coverage extraction (which has its own soft
+    fallbacks) is used.
     """
     sim = Simulation(situation=situation)
     results = {}
@@ -318,16 +341,17 @@ def _run_simulation(situation: dict[str, Any], year: int) -> tuple[dict[str, flo
                 results[var] = float(sum(value))
             else:
                 results[var] = float(value)
-        except Exception as e:
-            if var in OPTIONAL_VARIABLES:
+        except Exception:
+            if var in OPTIONAL_VARIABLES or not strict:
                 results[var] = 0.0
             else:
-                # Surface the failure instead of silently reporting $0 —
-                # an all-zeros response is indistinguishable from a real
-                # "no coverage, no cost" answer.
-                raise ValueError(
-                    f"Simulation could not compute {var}: {str(e)[:200]}"
-                ) from e
+                # Full details go to the server log; the raised message
+                # is user-safe (no internal exception text or paths).
+                logger.exception("Failed to compute %s for year %s", var, year)
+                raise SimulationComputeError(
+                    f"The simulation engine could not compute {var} for this "
+                    "household. Please check your inputs and try again."
+                )
 
     return results, sim
 
@@ -457,7 +481,7 @@ def _extract_counterfactual_before_coverage(
         zip_code=household.zip_code,
     )
     _, spouse_sim = _run_simulation(
-        spouse_household.to_situation(), spouse_household.year
+        spouse_household.to_situation(), spouse_household.year, strict=False
     )
     spouse_coverage = _extract_healthcare_coverage(
         spouse_sim,
@@ -542,7 +566,7 @@ def _extract_counterfactual_after_coverage(
         zip_code=household.zip_code,
     )
     _, ex_spouse_sim = _run_simulation(
-        ex_spouse_household.to_situation(), ex_spouse_household.year
+        ex_spouse_household.to_situation(), ex_spouse_household.year, strict=False
     )
     ex_spouse_coverage = _extract_healthcare_coverage(
         ex_spouse_sim,

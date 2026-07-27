@@ -405,7 +405,15 @@ export default function HouseholdWizard({ onComplete, onBack, onPartialChange }:
             <div className="flex justify-between items-center mt-6 gap-3 flex-wrap">
               <button
                 type="button"
-                onClick={() => setEsiBlocked(false)}
+                onClick={() => {
+                  // Fully reset the ESI answer so the question and the
+                  // "So far" summary don't keep showing "Yes".
+                  setEsiBlocked(false);
+                  setHasESI(false);
+                  setSpouseHasESI(false);
+                  setEsiTouched(false);
+                  onPartialChange?.(buildPartial({ hasESI: undefined, spouseHasESI: undefined }));
+                }}
                 className="btn btn-ghost"
               >
                 Back

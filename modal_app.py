@@ -37,7 +37,11 @@ def simulate(data: dict) -> dict:
         create_event_from_request,
         format_result_for_frontend,
     )
-    from healthcare_crossroads.compare import compare, compare_multiple
+    from healthcare_crossroads.compare import (
+        SimulationComputeError,
+        compare,
+        compare_multiple,
+    )
 
     try:
         cache_key = get_cache_key(data)
@@ -83,10 +87,17 @@ def simulate(data: dict) -> dict:
             pass
 
         return response
-    except ValueError as e:
+    except (ValueError, SimulationComputeError) as e:
+        # Validation and compute-error messages are written to be user-safe.
         return {"error": str(e)}
-    except Exception as e:
-        return {"error": f"Simulation failed: {str(e)}"}
+    except Exception:
+        # Match the Flask API: log the traceback in the container, never
+        # send internal exception text (paths, PolicyEngine internals) to
+        # the client.
+        import traceback
+
+        print(traceback.format_exc())
+        return {"error": "Simulation failed due to an internal error."}
 
 
 @app.function(image=image)
