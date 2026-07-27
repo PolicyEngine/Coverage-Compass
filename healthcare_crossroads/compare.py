@@ -28,6 +28,12 @@ OUTPUT_VARIABLES = [
     "lcbp",                      # gross lowest-cost bronze plan (annual, 2026+)
 ]
 
+# Variables whose absence is a data gap rather than a failed simulation:
+# lcbp has no data for state-exchange states, and chip_premium only exists
+# in the 17 states that charge CHIP enrollment fees. These default to 0;
+# any other variable failing raises so bad input can't return silent zeros.
+OPTIONAL_VARIABLES = {"lcbp", "chip_premium"}
+
 
 # State-specific labels for the federal Basic Health Program (42 USC 18051).
 # PolicyEngine models all four under the same `is_basic_health_program_eligible`
@@ -48,8 +54,9 @@ class PersonHealthcare:
     label: str  # "You", "Spouse", "Child 1", etc.
     medicaid: bool = False
     chip: bool = False
-    marketplace: bool = False  # ACA marketplace (inferred from PTC)
+    marketplace: bool = False  # ACA marketplace with a premium tax credit
     esi: bool = False  # Employer-sponsored insurance
+    medicare: bool = False  # Age 65+ (Medicare-eligible)
     bhp: bool = False  # Basic Health Program (NY Essential Plan, MinnesotaCare, etc.)
     bhp_label: str | None = None  # State-specific BHP brand name
 
@@ -58,6 +65,10 @@ class PersonHealthcare:
         """Return the primary coverage type for this person."""
         if self.esi:
             return "ESI"
+        # 65+ dual-eligibles (Medicare + Medicaid) surface as Medicare, the
+        # primary payer.
+        if self.medicare:
+            return "Medicare"
         # BHP enrollees (NY Essential Plan, MinnesotaCare, OHP Bridge, Healthy DC)
         # are surfaced as Medicaid for now — same UX bucket, no separate pill.
         # The bhp / bhp_label fields stay populated so we can differentiate later.
@@ -67,7 +78,10 @@ class PersonHealthcare:
             return "CHIP"
         if self.marketplace:
             return "Marketplace"
-        return None
+        # Anyone else can still buy a marketplace plan — just without a
+        # subsidy (e.g. income above the 400% FPL cliff). "No coverage"
+        # would misread as losing insurance entirely.
+        return "Marketplace (full price)"
 
 
 @dataclass
@@ -304,8 +318,16 @@ def _run_simulation(situation: dict[str, Any], year: int) -> tuple[dict[str, flo
                 results[var] = float(sum(value))
             else:
                 results[var] = float(value)
-        except Exception:
-            results[var] = 0.0
+        except Exception as e:
+            if var in OPTIONAL_VARIABLES:
+                results[var] = 0.0
+            else:
+                # Surface the failure instead of silently reporting $0 —
+                # an all-zeros response is indistinguishable from a real
+                # "no coverage, no cost" answer.
+                raise ValueError(
+                    f"Simulation could not compute {var}: {str(e)[:200]}"
+                ) from e
 
     return results, sim
 
@@ -379,19 +401,26 @@ def _extract_healthcare_coverage(
 
         # Check ESI first (from household member data)
         has_esi = member.has_esi
+        on_medicare = member.age >= 65
 
         on_medicaid = medicaid_amount > 0 and not has_esi
         on_chip = chip_amount > 0 and not has_esi
         on_bhp = on_bhp_raw and not has_esi and not on_medicaid and not on_chip
         # BHP replaces marketplace for eligible adults — don't double-assign.
         on_marketplace = (
-            has_ptc and not has_esi and not on_medicaid and not on_chip and not on_bhp
+            has_ptc
+            and not has_esi
+            and not on_medicare
+            and not on_medicaid
+            and not on_chip
+            and not on_bhp
         )
 
         people.append(PersonHealthcare(
             person_index=i,
             label=_get_person_label(i, household),
             esi=has_esi,
+            medicare=on_medicare,
             medicaid=on_medicaid,
             chip=on_chip,
             marketplace=on_marketplace,
@@ -448,6 +477,7 @@ def _extract_counterfactual_before_coverage(
                 chip=person.chip,
                 marketplace=person.marketplace,
                 esi=person.esi,
+                medicare=person.medicare,
                 bhp=person.bhp,
                 bhp_label=person.bhp_label,
             )
@@ -532,6 +562,7 @@ def _extract_counterfactual_after_coverage(
                 chip=person.chip,
                 marketplace=person.marketplace,
                 esi=person.esi,
+                medicare=person.medicare,
                 bhp=person.bhp,
                 bhp_label=person.bhp_label,
             )

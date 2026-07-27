@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import HouseholdWizard from '@/components/HouseholdWizard';
 import ChangeWizard from '@/components/ChangeWizard';
 import ResultsView from '@/components/ResultsView';
@@ -37,6 +37,7 @@ function decodeScenario(encoded: string): { household: Household; event: LifeEve
         hasESI: data.h.hasESI ?? false,
         spouseHasESI: data.h.spouseHasESI ?? false,
         year: data.h.year ?? 2026,
+        pregnantMember: data.h.pregnantMember ?? null,
       };
       return { household, event: data.e, params: data.p || {} };
     }
@@ -59,6 +60,11 @@ export default function Home() {
   const result = scenarios.find((s) => s.id === currentScenarioId)?.result ?? null;
   const otherScenarios = scenarios.filter((s) => s.id !== currentScenarioId);
 
+  // Monotonic id for in-flight simulations. A response only lands if its id
+  // still matches, so a slow request can't resurrect state after the user
+  // starts over or kicks off a newer simulation.
+  const requestSeq = useRef(0);
+
   // Fire a no-op /api/baseline request when the wizard completes. This
   // doesn't return useful data anymore, but it warms the Modal container
   // so the subsequent /api/simulate call on Apply doesn't pay a cold start.
@@ -79,6 +85,7 @@ export default function Home() {
     event: LifeEventType,
     params: Record<string, unknown>,
   ) => {
+    const reqId = ++requestSeq.current;
     setIsLoading(true);
     setError(null);
     try {
@@ -90,7 +97,15 @@ export default function Home() {
           lifeEvent: { type: event, params },
         }),
       });
+      const contentType = response.headers.get('content-type') ?? '';
+      if (!contentType.includes('application/json')) {
+        // Platform timeouts and gateway errors return HTML/text bodies.
+        throw new Error(
+          `The simulation service returned an unexpected response (HTTP ${response.status}). Please try again.`,
+        );
+      }
       const data = await response.json();
+      if (reqId !== requestSeq.current) return; // stale response; a newer action superseded it
       if (data.error) throw new Error(data.error);
       if (!data.before || !data.after) throw new Error('Invalid response from simulation');
       const id = newScenarioId();
@@ -101,9 +116,12 @@ export default function Home() {
       setShareUrl(url);
       window.history.replaceState({}, '', `?s=${encoded}`);
     } catch (err) {
+      if (reqId !== requestSeq.current) return;
       setError(err instanceof Error ? err.message : 'Something went wrong');
     } finally {
-      setIsLoading(false);
+      if (reqId === requestSeq.current) {
+        setIsLoading(false);
+      }
     }
   }, []);
 
@@ -137,7 +155,9 @@ export default function Home() {
   }, [runSimulation]);
 
   const handleWizardComplete = (h: Household) => {
+    requestSeq.current++; // drop any in-flight simulation from a previous household
     setHousehold(h);
+    setIsLoading(false);
     setSelectedEvent(null);
     setEventParams({});
     setScenarios([]);
@@ -171,6 +191,8 @@ export default function Home() {
   const handleTryAnother = () => {
     // Keep household + scenario history. Clear the active event/result so
     // the user can model a new what-if.
+    requestSeq.current++;
+    setIsLoading(false);
     setSelectedEvent(null);
     setEventParams({});
     setCurrentScenarioId(null);
@@ -180,6 +202,8 @@ export default function Home() {
   };
 
   const handleReset = () => {
+    requestSeq.current++;
+    setIsLoading(false);
     setHousehold(null);
     setSelectedEvent(null);
     setEventParams({});
@@ -301,8 +325,10 @@ export default function Home() {
           </>
         )}
 
-        {/* Household entered: show change wizard until results are ready */}
-        {household && !isLoading && !result && (
+        {/* Household entered: show change wizard until results are ready.
+            Hidden while an error card is up so the two don't contradict
+            each other — the error card's own buttons route back here. */}
+        {household && !isLoading && !result && !error && (
           <ChangeWizard
             household={household}
             onApply={(event, params) => {
@@ -568,22 +594,45 @@ function describeScenarioChanges(
   }
 }
 
+// Describe a set of people ("You", "Spouse", "Child 1", …) as a phrase.
+function describeWho(labels: string[]): string {
+  const hasYou = labels.includes('You');
+  const others = labels.filter((l) => l !== 'You');
+  if (hasYou && others.length === 0) return 'you';
+  if (hasYou) return 'you and your family';
+  if (others.length === 1 && others[0] === 'Spouse') return 'your partner';
+  if (others.every((l) => l.startsWith('Child'))) {
+    return others.length === 1 ? 'your child' : 'your children';
+  }
+  return 'your family';
+}
+
 // Build the hero headline strictly from observable transitions in the
 // simulation result so the copy can't contradict the table beneath it.
+// Per-person transitions take priority: "your family qualifies for
+// Medicaid" is the story, not the mechanical side effect that the ACA
+// tax credit ended because of it.
 function getHeroHeadline(eventType: LifeEventType, result: SimulationResult): string {
   const beforePeople = result.healthcareBefore?.people ?? [];
   const afterPeople = result.healthcareAfter?.people ?? [];
-  const head = (label: string) => label === 'You';
 
-  // Per-person transitions for the head of household.
-  const headBefore = beforePeople.find((p) => head(p.label))?.coverage ?? null;
-  const headAfter = afterPeople.find((p) => head(p.label))?.coverage ?? null;
+  // Per-person coverage transitions, keyed by label.
+  const beforeByLabel = new Map(beforePeople.map((p) => [p.label, p.coverage]));
+  const afterByLabel = new Map(afterPeople.map((p) => [p.label, p.coverage]));
+  const allLabels = Array.from(new Set([...beforeByLabel.keys(), ...afterByLabel.keys()]));
 
-  // Household-level transitions (any person).
-  const anyMedicaidBefore = beforePeople.some((p) => p.coverage === 'Medicaid');
-  const anyMedicaidAfter = afterPeople.some((p) => p.coverage === 'Medicaid');
-  const anyMarketplaceBefore = beforePeople.some((p) => p.coverage === 'Marketplace');
-  const anyMarketplaceAfter = afterPeople.some((p) => p.coverage === 'Marketplace');
+  const gainedMedicaid = allLabels.filter(
+    (l) => beforeByLabel.get(l) !== 'Medicaid' && afterByLabel.get(l) === 'Medicaid',
+  );
+  const lostMedicaid = allLabels.filter(
+    (l) => beforeByLabel.get(l) === 'Medicaid' && afterByLabel.get(l) !== 'Medicaid',
+  );
+  const isMarketplace = (c: string | null | undefined) => !!c && c.startsWith('Marketplace');
+  const anyMarketplaceBefore = beforePeople.some((p) => isMarketplace(p.coverage));
+  const anyMarketplaceAfter = afterPeople.some((p) => isMarketplace(p.coverage));
+  const gainedMedicare = allLabels.filter(
+    (l) => beforeByLabel.get(l) !== 'Medicare' && afterByLabel.get(l) === 'Medicare',
+  );
 
   // Metric-level transitions.
   const metrics = result.before.metrics ?? [];
@@ -604,23 +653,29 @@ function getHeroHeadline(eventType: LifeEventType, result: SimulationResult): st
   };
   const subject = verbs[eventType];
 
-  // Salient transition takes priority over generic copy.
-  if (!anyMedicaidBefore && anyMedicaidAfter) return `${subject} qualifies you for Medicaid.`;
-  if (anyMedicaidBefore && !anyMedicaidAfter) return `${subject} moves you out of Medicaid.`;
-  if (lostPTC) return `${subject} ends your ACA tax credit.`;
+  // Coverage-program transitions take priority over tax-credit mechanics.
+  if (gainedMedicaid.length > 0) {
+    return `${subject} qualifies ${describeWho(gainedMedicaid)} for Medicaid.`;
+  }
+  if (lostMedicaid.length > 0) {
+    return `${subject} moves ${describeWho(lostMedicaid)} out of Medicaid.`;
+  }
+  if (gainedMedicare.length > 0) {
+    return `${subject} moves ${describeWho(gainedMedicare)} onto Medicare.`;
+  }
+  if (lostPTC) return `${subject} ends your ACA tax credit — you'd pay full price.`;
   if (gainedPTC) return `${subject} qualifies you for an ACA tax credit.`;
+  const headBefore = beforeByLabel.get('You') ?? null;
+  const headAfter = afterByLabel.get('You') ?? null;
   if (headBefore === 'ESI' && headAfter !== 'ESI') return `${subject} ends your employer health insurance.`;
   if (headBefore !== 'ESI' && headAfter === 'ESI') return `${subject} starts employer health insurance.`;
   if (!anyMarketplaceBefore && anyMarketplaceAfter) return `${subject} moves you onto the ACA marketplace.`;
   if (anyMarketplaceBefore && !anyMarketplaceAfter) return `${subject} moves you off the ACA marketplace.`;
 
   // Detect a fully-unchanged outcome so we don't promise a "change" that
-  // didn't happen. Compare before/after person-by-person.
-  const beforePeopleByLabel = new Map(beforePeople.map((p) => [p.label, p.coverage]));
-  const afterPeopleByLabel = new Map(afterPeople.map((p) => [p.label, p.coverage]));
-  const allLabels = new Set([...beforePeopleByLabel.keys(), ...afterPeopleByLabel.keys()]);
-  const coverageUnchanged = Array.from(allLabels).every(
-    (label) => beforePeopleByLabel.get(label) === afterPeopleByLabel.get(label),
+  // didn't happen.
+  const coverageUnchanged = allLabels.every(
+    (label) => beforeByLabel.get(label) === afterByLabel.get(label),
   );
   if (coverageUnchanged) {
     return `${subject} doesn't change your coverage.`;

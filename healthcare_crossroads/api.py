@@ -295,19 +295,22 @@ def format_result_for_frontend(result) -> dict:
     lcbp_change  = result.changes.get("lcbp")
     ptc_change = result.changes.get("premium_tax_credit")
     if slcsp_change and (slcsp_change.before > 0 or slcsp_change.after > 0):
-        state = _extract_state_code(result.before_situation)
+        # Use each side's own state so a move estimates the after-side
+        # bronze premium with the destination state's bronze/silver ratio.
+        before_state = _extract_state_code(result.before_situation)
+        after_state = _extract_state_code(result.after_situation)
         response["acaPremiums"] = {
             "before": _aca_premium_side(
                 slcsp=slcsp_change.before,
                 lcbp=lcbp_change.before if lcbp_change else 0,
                 ptc=ptc_change.before if ptc_change else 0,
-                state=state,
+                state=before_state,
             ),
             "after": _aca_premium_side(
                 slcsp=slcsp_change.after,
                 lcbp=lcbp_change.after if lcbp_change else 0,
                 ptc=ptc_change.after if ptc_change else 0,
-                state=state,
+                state=after_state,
             ),
         }
 
@@ -403,8 +406,11 @@ def simulate():
         return jsonify(format_result_for_frontend(result))
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
-    except Exception as e:
-        return jsonify({"error": f"Simulation failed: {str(e)}"}), 500
+    except Exception:
+        # Don't leak internal exception details (file paths, PolicyEngine
+        # internals) to clients; the traceback goes to the server log.
+        app.logger.exception("Simulation failed")
+        return jsonify({"error": "Simulation failed due to an internal error."}), 500
 
 
 @app.route("/api/baseline", methods=["POST"])
@@ -422,8 +428,9 @@ def baseline():
         return jsonify(run_baseline_response(household_dict))
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
-    except Exception as e:
-        return jsonify({"error": f"Baseline simulation failed: {str(e)}"}), 500
+    except Exception:
+        app.logger.exception("Baseline simulation failed")
+        return jsonify({"error": "Baseline simulation failed due to an internal error."}), 500
 
 
 @app.route("/api/health", methods=["GET"])

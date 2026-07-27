@@ -38,6 +38,9 @@ export default function HouseholdWizard({ onComplete, onBack, onPartialChange }:
   const [hasESI, setHasESI] = useState<boolean>(false);
   const [spouseHasESI, setSpouseHasESI] = useState<boolean>(false);
   const [esiTouched, setEsiTouched] = useState(false);
+  // Answering "Yes" to employer coverage is a dead end for this tool, so we
+  // say so immediately at step 5 instead of after the remaining questions.
+  const [esiBlocked, setEsiBlocked] = useState(false);
 
   const [childAges, setChildAges] = useState<Array<number | ''>>([]);
   const [hasKids, setHasKids] = useState<'yes' | 'no' | null>(null);
@@ -107,8 +110,13 @@ export default function HouseholdWizard({ onComplete, onBack, onPartialChange }:
     setHasESI(selfESI);
     setSpouseHasESI(partnerESI);
     setEsiTouched(true);
-    setStep(6);
     onPartialChange?.(buildPartial({ hasESI: selfESI, spouseHasESI: partnerESI }));
+    if (selfESI || partnerESI) {
+      setEsiBlocked(true);
+      return;
+    }
+    setEsiBlocked(false);
+    setStep(6);
   }
 
   function addChild() {
@@ -377,7 +385,43 @@ export default function HouseholdWizard({ onComplete, onBack, onPartialChange }:
           </form>
         )}
 
-        {step === 5 && (
+        {step === 5 && esiBlocked && (
+          <div>
+            <div className="text-[10px] font-semibold uppercase tracking-widest text-amber-700 mb-2">
+              Heads up
+            </div>
+            <h2 className="text-xl font-bold text-gray-900 mb-3">
+              Coverage Compass isn&apos;t designed for households with employer health insurance.
+            </h2>
+            <p className="text-sm text-gray-600 leading-relaxed mb-3">
+              We model how life events affect <b>ACA marketplace coverage</b>, <b>Medicaid</b>, and <b>CHIP</b>.
+              We don&apos;t have data on your employer&apos;s premium contribution, plan options, or out-of-pocket
+              costs, so any comparison we showed would be incomplete.
+            </p>
+            <p className="text-sm text-gray-600 leading-relaxed">
+              If you&apos;re thinking about losing employer coverage and want to see what the marketplace
+              would look like, you can continue without employer coverage instead.
+            </p>
+            <div className="flex justify-between items-center mt-6 gap-3 flex-wrap">
+              <button
+                type="button"
+                onClick={() => setEsiBlocked(false)}
+                className="btn btn-ghost"
+              >
+                Back
+              </button>
+              <button
+                type="button"
+                onClick={() => selectESI(false, false)}
+                className="btn btn-primary"
+              >
+                Continue without employer coverage
+              </button>
+            </div>
+          </div>
+        )}
+
+        {step === 5 && !esiBlocked && (
           <div>
             <h2 className="text-2xl font-bold text-gray-900 mb-2">
               Does anyone in your household have health insurance through an employer?

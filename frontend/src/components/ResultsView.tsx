@@ -62,8 +62,13 @@ function getCoverageLabel(type: string | null): string {
       return 'Medicaid';
     case 'CHIP':
       return 'CHIP';
-    default:
+    case null:
       return 'No coverage';
+    default:
+      // Pass through backend-provided labels like "Medicare" or
+      // "Marketplace (full price)" so new coverage types never silently
+      // render as "No coverage".
+      return type;
   }
 }
 
@@ -73,7 +78,9 @@ function getCoverageLabel(type: string | null): string {
 const COVERAGE_TONES: Record<string, string> = {
   ESI: 'bg-blue-50 text-blue-800 border-blue-200',
   Marketplace: 'bg-[#E6FFFA] text-[#285E61] border-[#319795]/40',
+  'Marketplace (full price)': 'bg-[#E6FFFA] text-[#285E61] border-[#319795]/40',
   Medicaid: 'bg-violet-50 text-violet-800 border-violet-200',
+  Medicare: 'bg-indigo-50 text-indigo-800 border-indigo-200',
   CHIP: 'bg-pink-50 text-pink-800 border-pink-200',
 };
 
@@ -361,6 +368,11 @@ function MobileMetricCard({
 }
 
 export default function ResultsView({ result, eventType, onTryAnother, onReset }: ResultsViewProps) {
+  // Hooks must run unconditionally, before the incomplete-data guard below —
+  // otherwise a re-render across data shapes crashes with a hooks-order error.
+  const [selectedTier, setSelectedTier] = useState<Tier>('silver');
+  const [showBreakdown, setShowBreakdown] = useState(false);
+
   if (!result?.before || !result?.after) {
     return (
       <div className="card p-8 text-center">
@@ -375,9 +387,6 @@ export default function ResultsView({ result, eventType, onTryAnother, onReset }
       </div>
     );
   }
-
-  const [selectedTier, setSelectedTier] = useState<Tier>('silver');
-  const [showBreakdown, setShowBreakdown] = useState(false);
 
   const metrics = result.before.metrics || [];
 
@@ -714,7 +723,7 @@ export default function ResultsView({ result, eventType, onTryAnother, onReset }
       {showAcaPlans && acaScope && (
         <p className="text-[11px] text-gray-400 leading-relaxed px-1">
           Silver is the ACA&apos;s benchmark plan: your tax credit is set to keep its monthly cost at a fixed share of your
-          income, so silver&apos;s cost doesn&apos;t change when only your state or area changes.
+          income{eventType === 'moving_states' && ', so silver’s cost doesn’t change when only your state or area changes'}.
           {acaScope.bronzeGross > 0 && ' Bronze costs less per month but has higher deductibles, and its cost floats with local premiums.'}
         </p>
       )}
