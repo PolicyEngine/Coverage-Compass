@@ -2,7 +2,7 @@
 
 Model how life events affect a household's healthcare coverage and monthly out-of-pocket cost across **Medicaid**, **CHIP**, and the **ACA marketplace**.
 
-Live: https://coverage-compass-policy-engine.vercel.app/
+Live: https://policyengine.org/us/coverage-compass
 
 ## What it covers
 
