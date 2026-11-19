@@ -108,6 +108,11 @@ export interface HealthcareCoverage {
   people: PersonHealthcare[];
   summary: Record<string, string[]>; // e.g. { "Medicaid": ["You", "Child 1"] }
   has_ptc: boolean;
+  // The year's premium tax credit income range as ratios of the poverty
+  // line (e.g. 1 and 4), read from PolicyEngine. The limit is null when the
+  // credit has no upper income cap that year.
+  ptc_income_floor?: number | null;
+  ptc_income_limit?: number | null;
 }
 
 export interface AcaPremiumSide {

@@ -49,9 +49,53 @@ function getCoverageLabel(type: string | null): string {
       return 'Medicaid';
     case 'CHIP':
       return 'CHIP';
-    default:
+    case null:
       return 'No coverage';
+    default:
+      // Pass through backend-provided labels ("Medicare", "Medicare +
+      // Medicaid", "Marketplace (full price)", "Marketplace (no tax
+      // credit)", "Coverage gap", BHP names) so new coverage types never
+      // silently render as "No coverage".
+      return type;
   }
+}
+
+// Ratio of the poverty line (e.g. 4) as a percentage string ("400%").
+function formatFplRatio(ratio: number | null | undefined): string | null {
+  return typeof ratio === 'number' ? `${Math.round(ratio * 100)}%` : null;
+}
+
+// One-sentence explanations for the labels that name a reason for having
+// no Medicaid, CHIP or tax credit. Thresholds come from the backend, which
+// reads them from PolicyEngine for the simulated year.
+function getCoverageNotes(result: SimulationResult): string[] {
+  const sides = [result.healthcareBefore, result.healthcareAfter];
+  const present = new Set(
+    sides.flatMap((side) => (side?.people ?? []).map((p) => p.coverage)),
+  );
+  const floor = formatFplRatio(
+    result.healthcareAfter?.ptc_income_floor ?? result.healthcareBefore?.ptc_income_floor,
+  );
+  const limit = formatFplRatio(
+    result.healthcareAfter?.ptc_income_limit ?? result.healthcareBefore?.ptc_income_limit,
+  );
+  const notes: string[] = [];
+  if (present.has('Marketplace (full price)')) {
+    notes.push(
+      `Marketplace (full price): household income is above ${limit ? `${limit} of the federal poverty line, ` : ''}the income limit for the ACA premium tax credit, so marketplace plans cost their full premium.`,
+    );
+  }
+  if (present.has('Marketplace (no tax credit)')) {
+    notes.push(
+      'Marketplace (no tax credit): household income is within the premium tax credit’s range, but the credit works out to $0 for this household.',
+    );
+  }
+  if (present.has('Coverage gap')) {
+    notes.push(
+      `Coverage gap: household income is below ${floor ? `${floor} of the federal poverty line, ` : ''}the minimum for the ACA premium tax credit, and the state’s Medicaid rules don’t cover them at this income.`,
+    );
+  }
+  return notes;
 }
 
 // Color per coverage type so the eye separates "Marketplace" from "Medicaid"
@@ -60,8 +104,13 @@ function getCoverageLabel(type: string | null): string {
 const COVERAGE_TONES: Record<string, string> = {
   ESI: 'bg-blue-50 text-blue-800 border-blue-200',
   Marketplace: 'bg-[#E6FFFA] text-[#285E61] border-[#319795]/40',
+  'Marketplace (full price)': 'bg-[#E6FFFA] text-[#285E61] border-[#319795]/40',
+  'Marketplace (no tax credit)': 'bg-[#E6FFFA] text-[#285E61] border-[#319795]/40',
   Medicaid: 'bg-violet-50 text-violet-800 border-violet-200',
+  Medicare: 'bg-indigo-50 text-indigo-800 border-indigo-200',
+  'Medicare + Medicaid': 'bg-indigo-50 text-indigo-800 border-indigo-200',
   CHIP: 'bg-pink-50 text-pink-800 border-pink-200',
+  'Coverage gap': 'bg-amber-50 text-amber-800 border-amber-200',
 };
 
 function CoveragePill({ type, exists }: { type: string | null; exists: boolean }) {
@@ -367,6 +416,7 @@ export default function ResultsView({ result, eventType, onTryAnother, onReset }
   }
 
   const metrics = result.before.metrics || [];
+  const coverageNotes = getCoverageNotes(result);
 
   // ACA plan options.
   const acaBefore = result.acaPremiums?.before;
@@ -701,9 +751,20 @@ export default function ResultsView({ result, eventType, onTryAnother, onReset }
       {showAcaPlans && acaScope && (
         <p className="text-[11px] text-gray-400 leading-relaxed px-1">
           Silver is the ACA&apos;s benchmark plan: your tax credit is set to keep its monthly cost at a fixed share of your
-          income, so silver&apos;s cost doesn&apos;t change when only your state or area changes.
+          income{eventType === 'moving_states' && ', so silver’s cost doesn’t change when only your state or area changes'}.
           {acaScope.bronzeGross > 0 && ' Bronze costs less per month but has higher deductibles, and its cost floats with local premiums.'}
         </p>
+      )}
+
+      {/* Explanations for coverage labels that name a reason */}
+      {coverageNotes.length > 0 && (
+        <div className="space-y-1 px-1">
+          {coverageNotes.map((note) => (
+            <p key={note} className="text-[11px] text-gray-400 leading-relaxed">
+              {note}
+            </p>
+          ))}
+        </div>
       )}
 
       <div className="flex justify-center gap-3 flex-wrap pt-2">

@@ -135,7 +135,7 @@ class TestCompareMarriage:
                     return [0.0]
                 raise KeyError(variable)
 
-        def fake_run_simulation(situation: dict, year: int):
+        def fake_run_simulation(situation: dict, year: int, strict: bool = True):
             people = situation["people"]
             first_person = people["person_0"]
             first_income = first_person["employment_income"][year]

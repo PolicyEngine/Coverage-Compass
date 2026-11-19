@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+import logging
 from copy import deepcopy
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any
 
 from policyengine_us import Simulation
@@ -12,6 +13,16 @@ from .events.base import LifeEvent
 from .events.divorce import Divorce
 from .events.marriage import Marriage
 from .household import Household, Person
+
+logger = logging.getLogger(__name__)
+
+
+class SimulationComputeError(RuntimeError):
+    """A core output variable could not be computed for a household.
+
+    The message is safe to show to end users; the underlying exception is
+    logged server-side only.
+    """
 
 
 # Healthcare-only variable list. The app surfaces healthcare coverage and
@@ -28,6 +39,12 @@ OUTPUT_VARIABLES = [
     "lcbp",                      # gross lowest-cost bronze plan (annual, 2026+)
 ]
 
+# Variables whose absence is a data gap rather than a failed simulation:
+# lcbp has no data for state-exchange states, and chip_premium only exists
+# in the 17 states that charge CHIP enrollment fees. These default to 0;
+# any other variable failing raises so bad input can't return silent zeros.
+OPTIONAL_VARIABLES = {"lcbp", "chip_premium"}
+
 
 # State-specific labels for the federal Basic Health Program (42 USC 18051).
 # PolicyEngine models all four under the same `is_basic_health_program_eligible`
@@ -40,6 +57,96 @@ BHP_STATE_LABEL = {
 }
 
 
+# Coverage labels sent to the frontend (PersonHealthcare.coverage_type).
+COVERAGE_ESI = "ESI"
+COVERAGE_MEDICARE = "Medicare"
+COVERAGE_MEDICARE_MEDICAID = "Medicare + Medicaid"
+COVERAGE_MEDICAID = "Medicaid"
+COVERAGE_CHIP = "CHIP"
+COVERAGE_MARKETPLACE = "Marketplace"
+# Only for people whose household income is above the premium tax credit's
+# income limit for the year.
+COVERAGE_MARKETPLACE_FULL_PRICE = "Marketplace (full price)"
+# PTC-eligible, but the credit works out to $0.
+COVERAGE_MARKETPLACE_NO_CREDIT = "Marketplace (no tax credit)"
+# Income below the PTC's income floor, and no Medicaid.
+COVERAGE_GAP = "Coverage gap"
+
+# Where a household's income-to-FPL ratio sits on PolicyEngine's
+# gov.aca.ptc_income_eligibility schedule.
+PTC_INCOME_BELOW_FLOOR = "below_floor"
+PTC_INCOME_ELIGIBLE = "eligible"
+PTC_INCOME_ABOVE_LIMIT = "above_limit"
+
+
+def classify_ptc_income(
+    fraction: float,
+    thresholds: list[float],
+    eligible: list[bool],
+) -> str | None:
+    """Place an ACA income-to-FPL ratio on the PTC income-eligibility schedule.
+
+    `thresholds` and `eligible` are the brackets of PolicyEngine's
+    `gov.aca.ptc_income_eligibility` parameter for the year: bracket i
+    applies from thresholds[i] up to the next threshold, as in
+    PolicyEngine's own lookup. The schedule, not a hard-coded 400%, decides
+    whether there is an upper limit (there was none in 2021-2025).
+
+    Returns PTC_INCOME_ELIGIBLE, PTC_INCOME_BELOW_FLOOR (below every eligible
+    bracket), PTC_INCOME_ABOVE_LIMIT (in an ineligible bracket above an
+    eligible one), or None if no bracket is eligible.
+    """
+    brackets = sorted(zip(thresholds, eligible))
+    eligible_starts = [start for start, ok in brackets if ok]
+    if not eligible_starts:
+        return None
+    current = False
+    for start, ok in brackets:
+        if fraction >= start:
+            current = bool(ok)
+    if current:
+        return PTC_INCOME_ELIGIBLE
+    if fraction < eligible_starts[0]:
+        return PTC_INCOME_BELOW_FLOOR
+    return PTC_INCOME_ABOVE_LIMIT
+
+
+def ptc_income_range(
+    thresholds: list[float],
+    eligible: list[bool],
+) -> tuple[float | None, float | None]:
+    """Return the (floor, limit) FPL ratios of the PTC income schedule.
+
+    The limit is None when eligibility has no upper cap that year.
+    """
+    floor = limit = None
+    for start, ok in sorted(zip(thresholds, eligible)):
+        if ok and floor is None:
+            floor = float(start)
+        elif not ok and floor is not None and limit is None:
+            limit = float(start)
+    return floor, limit
+
+
+def _ptc_income_schedule(
+    sim: Simulation,
+    year: int,
+) -> tuple[list[float], list[bool]] | None:
+    """Read the PTC income-eligibility brackets PolicyEngine applies in `year`."""
+    try:
+        scale = sim.tax_benefit_system.parameters(
+            f"{year}-01-01"
+        ).gov.aca.ptc_income_eligibility
+        return [float(t) for t in scale.thresholds], [bool(a) for a in scale.amounts]
+    except Exception:
+        logger.warning(
+            "Could not read the PTC income-eligibility schedule for %s",
+            year,
+            exc_info=True,
+        )
+        return None
+
+
 @dataclass
 class PersonHealthcare:
     """Healthcare coverage info for a single person."""
@@ -48,25 +155,44 @@ class PersonHealthcare:
     label: str  # "You", "Spouse", "Child 1", etc.
     medicaid: bool = False
     chip: bool = False
-    marketplace: bool = False  # ACA marketplace (inferred from PTC)
+    marketplace: bool = False  # ACA marketplace with a premium tax credit
     esi: bool = False  # Employer-sponsored insurance
+    medicare: bool = False  # Medicare-eligible (PolicyEngine is_medicare_eligible)
     bhp: bool = False  # Basic Health Program (NY Essential Plan, MinnesotaCare, etc.)
     bhp_label: str | None = None  # State-specific BHP brand name
+    ptc_eligible: bool = False  # PolicyEngine is_aca_ptc_eligible
+    # Household income on the PTC income schedule (a PTC_INCOME_* value), or
+    # None when it couldn't be determined.
+    ptc_income_band: str | None = None
 
     @property
     def coverage_type(self) -> str | None:
         """Return the primary coverage type for this person."""
         if self.esi:
-            return "ESI"
+            return COVERAGE_ESI
+        # Dual eligibles show both programs, so a 65+ person who gains or
+        # loses Medicaid shows a change.
+        if self.medicare:
+            return COVERAGE_MEDICARE_MEDICAID if self.medicaid else COVERAGE_MEDICARE
         # BHP enrollees (NY Essential Plan, MinnesotaCare, OHP Bridge, Healthy DC)
         # are surfaced as Medicaid for now — same UX bucket, no separate pill.
         # The bhp / bhp_label fields stay populated so we can differentiate later.
         if self.medicaid or self.bhp:
-            return "Medicaid"
+            return COVERAGE_MEDICAID
         if self.chip:
-            return "CHIP"
+            return COVERAGE_CHIP
         if self.marketplace:
-            return "Marketplace"
+            return COVERAGE_MARKETPLACE
+        # No Medicaid, CHIP or tax credit. Name the reason only when
+        # PolicyEngine's outputs show it.
+        if self.ptc_income_band == PTC_INCOME_ABOVE_LIMIT:
+            return COVERAGE_MARKETPLACE_FULL_PRICE
+        if self.ptc_income_band == PTC_INCOME_BELOW_FLOOR:
+            return COVERAGE_GAP
+        if self.ptc_eligible:
+            # Eligible, but the credit works out to $0 (e.g. the benchmark
+            # silver plan costs less than the required contribution).
+            return COVERAGE_MARKETPLACE_NO_CREDIT
         return None
 
 
@@ -76,6 +202,10 @@ class HealthcareCoverage:
 
     people: list[PersonHealthcare]
     has_ptc: bool = False  # Whether household receives Premium Tax Credit
+    # The year's PTC income range as FPL ratios, from PolicyEngine's
+    # parameters (limit is None when there is no upper cap).
+    ptc_income_floor: float | None = None
+    ptc_income_limit: float | None = None
 
     def get_coverage_summary(self) -> dict[str, list[str]]:
         """Return dict mapping coverage type to list of person labels."""
@@ -100,6 +230,8 @@ class HealthcareCoverage:
             ],
             "summary": self.get_coverage_summary(),
             "has_ptc": self.has_ptc,
+            "ptc_income_floor": self.ptc_income_floor,
+            "ptc_income_limit": self.ptc_income_limit,
         }
 
 
@@ -287,11 +419,23 @@ class ComparisonResult:
         return result
 
 
-def _run_simulation(situation: dict[str, Any], year: int) -> tuple[dict[str, float], Simulation]:
+def _run_simulation(
+    situation: dict[str, Any],
+    year: int,
+    strict: bool = True,
+) -> tuple[dict[str, float], Simulation]:
     """Run a PolicyEngine simulation and extract key outputs.
 
     Returns both the aggregated results and the simulation object for
     further per-person analysis.
+
+    With strict=True (the default), a core variable failing to compute
+    raises SimulationComputeError instead of silently reporting $0 — an
+    all-zeros response is indistinguishable from a real "no coverage,
+    no cost" answer. Counterfactual side-simulations (marriage/divorce)
+    pass strict=False because their aggregated results are discarded;
+    only the per-person coverage extraction (which has its own soft
+    fallbacks) is used.
     """
     sim = Simulation(situation=situation)
     results = {}
@@ -305,7 +449,16 @@ def _run_simulation(situation: dict[str, Any], year: int) -> tuple[dict[str, flo
             else:
                 results[var] = float(value)
         except Exception:
-            results[var] = 0.0
+            if var in OPTIONAL_VARIABLES or not strict:
+                results[var] = 0.0
+            else:
+                # Full details go to the server log; the raised message
+                # is user-safe (no internal exception text or paths).
+                logger.exception("Failed to compute %s for year %s", var, year)
+                raise SimulationComputeError(
+                    f"The simulation engine could not compute {var} for this "
+                    "household. Please check your inputs and try again."
+                )
 
     return results, sim
 
@@ -361,6 +514,30 @@ def _extract_healthcare_coverage(
 
     bhp_label = BHP_STATE_LABEL.get(household.state)
 
+    try:
+        medicare_values = sim.calculate("is_medicare_eligible", year)
+    except Exception:
+        # Fall back to Medicare's age test (42 USC 426(a)).
+        medicare_values = [member.age >= 65 for member in household.members]
+
+    try:
+        ptc_eligible_values = sim.calculate("is_aca_ptc_eligible", year)
+    except Exception:
+        ptc_eligible_values = [False] * num_people
+
+    # Each person's household income-to-FPL ratio, placed on the PTC income
+    # schedule PolicyEngine applies for the year.
+    schedule = _ptc_income_schedule(sim, year)
+    fraction_values = None
+    if schedule is not None:
+        try:
+            fraction_values = sim.calculate("aca_magi_fraction", year, map_to="person")
+        except Exception:
+            logger.warning("Could not compute aca_magi_fraction", exc_info=True)
+    ptc_income_floor, ptc_income_limit = (
+        ptc_income_range(*schedule) if schedule is not None else (None, None)
+    )
+
     # Get household-level PTC
     try:
         ptc_value = float(sum(sim.calculate("premium_tax_credit", year)))
@@ -379,27 +556,51 @@ def _extract_healthcare_coverage(
 
         # Check ESI first (from household member data)
         has_esi = member.has_esi
+        on_medicare = bool(medicare_values[i]) if i < len(medicare_values) else False
+        ptc_eligible = (
+            bool(ptc_eligible_values[i]) if i < len(ptc_eligible_values) else False
+        )
+        ptc_income_band = None
+        if (
+            schedule is not None
+            and fraction_values is not None
+            and i < len(fraction_values)
+        ):
+            ptc_income_band = classify_ptc_income(float(fraction_values[i]), *schedule)
 
         on_medicaid = medicaid_amount > 0 and not has_esi
         on_chip = chip_amount > 0 and not has_esi
         on_bhp = on_bhp_raw and not has_esi and not on_medicaid and not on_chip
         # BHP replaces marketplace for eligible adults — don't double-assign.
         on_marketplace = (
-            has_ptc and not has_esi and not on_medicaid and not on_chip and not on_bhp
+            has_ptc
+            and not has_esi
+            and not on_medicare
+            and not on_medicaid
+            and not on_chip
+            and not on_bhp
         )
 
         people.append(PersonHealthcare(
             person_index=i,
             label=_get_person_label(i, household),
             esi=has_esi,
+            medicare=on_medicare,
             medicaid=on_medicaid,
             chip=on_chip,
             marketplace=on_marketplace,
             bhp=on_bhp,
             bhp_label=bhp_label if on_bhp else None,
+            ptc_eligible=ptc_eligible,
+            ptc_income_band=ptc_income_band,
         ))
 
-    return HealthcareCoverage(people=people, has_ptc=has_ptc)
+    return HealthcareCoverage(
+        people=people,
+        has_ptc=has_ptc,
+        ptc_income_floor=ptc_income_floor,
+        ptc_income_limit=ptc_income_limit,
+    )
 
 
 def _extract_counterfactual_before_coverage(
@@ -428,7 +629,7 @@ def _extract_counterfactual_before_coverage(
         zip_code=household.zip_code,
     )
     _, spouse_sim = _run_simulation(
-        spouse_household.to_situation(), spouse_household.year
+        spouse_household.to_situation(), spouse_household.year, strict=False
     )
     spouse_coverage = _extract_healthcare_coverage(
         spouse_sim,
@@ -441,22 +642,14 @@ def _extract_counterfactual_before_coverage(
     for offset, person in enumerate(spouse_coverage.people):
         after_index = starting_index + offset
         remapped_people.append(
-            PersonHealthcare(
+            replace(
+                person,
                 person_index=after_index,
                 label=_get_person_label(after_index, after_household),
-                medicaid=person.medicaid,
-                chip=person.chip,
-                marketplace=person.marketplace,
-                esi=person.esi,
-                bhp=person.bhp,
-                bhp_label=person.bhp_label,
             )
         )
 
-    return HealthcareCoverage(
-        people=remapped_people,
-        has_ptc=spouse_coverage.has_ptc,
-    )
+    return replace(spouse_coverage, people=remapped_people)
 
 
 def _extract_counterfactual_after_coverage(
@@ -512,7 +705,7 @@ def _extract_counterfactual_after_coverage(
         zip_code=household.zip_code,
     )
     _, ex_spouse_sim = _run_simulation(
-        ex_spouse_household.to_situation(), ex_spouse_household.year
+        ex_spouse_household.to_situation(), ex_spouse_household.year, strict=False
     )
     ex_spouse_coverage = _extract_healthcare_coverage(
         ex_spouse_sim,
@@ -525,22 +718,14 @@ def _extract_counterfactual_after_coverage(
     remapped_people = []
     for person, original_index in zip(ex_spouse_coverage.people, original_indices):
         remapped_people.append(
-            PersonHealthcare(
+            replace(
+                person,
                 person_index=original_index,
                 label=_get_person_label(original_index, household),
-                medicaid=person.medicaid,
-                chip=person.chip,
-                marketplace=person.marketplace,
-                esi=person.esi,
-                bhp=person.bhp,
-                bhp_label=person.bhp_label,
             )
         )
 
-    return HealthcareCoverage(
-        people=remapped_people,
-        has_ptc=ex_spouse_coverage.has_ptc,
-    )
+    return replace(ex_spouse_coverage, people=remapped_people)
 
 
 def _merge_healthcare_coverage(
@@ -555,7 +740,8 @@ def _merge_healthcare_coverage(
     for person in extra.people:
         merged_people.setdefault(person.label, person)
 
-    return HealthcareCoverage(
+    return replace(
+        primary,
         people=sorted(merged_people.values(), key=lambda person: person.person_index),
         has_ptc=primary.has_ptc or extra.has_ptc,
     )

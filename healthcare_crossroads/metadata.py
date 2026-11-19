@@ -28,7 +28,11 @@ VARIABLE_METADATA = {
     "chip": ("CHIP", "benefit", 1),
     # ACA marketplace premiums
     "slcsp": ("Silver Plan (Gross)", "aca_premium", 1),
+    "lcbp": ("Bronze Plan (Gross)", "aca_premium", 1),
     "marketplace_net_premium": ("Silver Plan (Your Cost)", "aca_premium", 1),
+    # CHIP enrollment fee is money the family pays — categorize it as a
+    # premium-like cost so totalBenefits doesn't count it as a benefit.
+    "chip_premium": ("CHIP Enrollment Fee", "aca_premium", 1),
     # Energy/utilities
     "liheap": ("LIHEAP (Energy)", "benefit", 2),
     "lifeline": ("Lifeline (Phone)", "benefit", 2),

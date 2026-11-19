@@ -115,6 +115,19 @@ class TestHousehold:
         assert hh["state_code"] == {2026: "CA"}
         assert hh["county"] == {2026: "Los Angeles County"}
 
+    def test_situation_marks_tax_unit_as_filer(self):
+        """The tax unit files a return, as claiming the premium tax credit requires."""
+        household = Household(
+            state="CA",
+            members=[
+                Person(age=40, employment_income=31000, is_tax_unit_head=True),
+                Person(age=40, is_tax_unit_spouse=True),
+            ],
+        )
+        tax_unit = household.to_situation()["tax_units"]["tax_unit"]
+        assert tax_unit["would_file_taxes_voluntarily"] == {2026: True}
+        assert tax_unit["members"] == ["person_0", "person_1"]
+
     def test_household_copy(self):
         """Household.copy() creates a deep copy."""
         original = Household(

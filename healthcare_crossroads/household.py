@@ -125,7 +125,17 @@ class Household:
             else:
                 dependents.append(person_id)
 
-        tax_unit = {"members": tax_unit_members}
+        tax_unit = {
+            "members": tax_unit_members,
+            # The tool shows what a household pays with the premium tax
+            # credit, and claiming the credit or receiving advance payments
+            # requires filing a federal return (26 CFR 1.6011-8(a)). Without
+            # this, policyengine-us releases before 2.42.2 (including the
+            # pinned 1.669.0) zero the credit for households under the filing
+            # threshold, e.g. a couple at $31k, about 146% FPL. Later releases
+            # reach the same result through takes_up_aca_if_eligible.
+            "would_file_taxes_voluntarily": {self.year: True},
+        }
         # Mark head/spouse roles on the people, not on tax_unit
         if head:
             people[head]["is_tax_unit_head"] = {self.year: True}
